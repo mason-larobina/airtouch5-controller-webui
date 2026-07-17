@@ -32,8 +32,6 @@ dependencies = [
 [[package]]
 name = "airtouch5"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5678f29b40f13c48bf99ec6fe9dbac4673e8cac5df89a0f3d10acdc620d25ed0"
 dependencies = [
  "bitflags",
  "crc16",
