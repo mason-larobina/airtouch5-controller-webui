@@ -74,26 +74,23 @@ path in `<script src=...>` so a version bump is a cache-bust.
 
 ## 3. Architecture
 
-```
-                +----------------------------------------------+
-                |              tokio runtime (multi-thread)       |
-                |                                                |
-   +------------+-----------+        +--------------------------+----+
-   |  connection manager     |        |           axum router          |
-   |  (owns AirTouch5)       |        |                                |
-   |                         |  cmd   |  GET  /            index.html  |
-   |  - discover + connect   |<-------|  GET  /partials/*  fragments  |
-   |  - prefill status       |        |  GET  /events      SSE stream  |
-   |  - watch CurrentStatus  |        |  POST /zone/:id/... controls   |
-   |  - apply commands       |  reply |  POST /ac/:id/...  (phase 2)   |
-   |  - reconnect loop       |------->|                                |
-   |                         |        |  handlers clone ManagerHandle  |
-   |  publishes Snapshot via |        +--------------------------------+
-   |  watch::Sender<Snapshot>|                     ^
-   |  + broadcast for SSE    |---------------------+
-   +-------------------------+   (handlers read current Snapshot,
-                                  send Commands, render fragments)
-```
+The whole server runs on a multi-threaded tokio runtime with two cooperating parts:
+
+- **Connection manager** -- a long-lived task that owns the `AirTouch5` handle. It:
+  - discovers and connects to the console,
+  - prefills the initial status,
+  - watches `CurrentStatus` for live updates,
+  - applies incoming `Command`s from the web layer,
+  - runs a reconnect loop on failure, and
+  - publishes the latest `Snapshot` via a `tokio::sync::watch::Sender<Snapshot>` (plus a `broadcast` tick for SSE clients).
+- **axum router** -- the HTTP layer. Handlers clone a `ManagerHandle`, read the current `Snapshot` for rendering, send `Command`s to the manager, and render HTML fragments. Routes:
+  - `GET /` -- `index.html`
+  - `GET /partials/*` -- fragment responses
+  - `GET /events` -- SSE stream
+  - `POST /zone/:id/...` -- zone controls (phase 1)
+  - `POST /ac/:id/...` -- AC controls (phase 2)
+
+The router sends `Command`s to the manager and awaits a reply; the manager applies them against `AirTouch5`.
 
 ### 3.1 Why an actor for the connection
 
@@ -382,29 +379,13 @@ fine (idempotent swap). Response `HX-Redirect`/`HX-Trigger` not needed.
 
 ## 6. UI layout
 
-```
-+---------------------------- AirTouch 5 - <SystemName> ---------------------------+
-| * Connected   192.168.x.x   ID #13   FW v...   [refresh]                           |  <- #system / #connection-state
-+----------------------------------------------------------------------------------+
-| AC units                                                                         |
-|  +---------------------+ +---------------------+                                 |  <- #ac-<id>
-|  | Upstairs  ON  Heat    | | Downstairs OFF      |                                 |
-|  | Fan: Low   22.0->23.0  | | ...                   |                                 |
-|  +---------------------+ +---------------------+                                 |
-+----------------------------------------------------------------------------------+
-| Zones                                                                            |
-|  +----------------------------------------------------------------------------+  |  <- #zone-<id>
-|  | Living Room   * ON   [ % Airflow | Temp Setpoint ]   turbo [off]            |  |
-|  | Airflow: ########-- 65%    Sensor: 24.3 C   Setpoint: 23.0 C                |  |
-|  | [ - ] [ + ]  (mode=airflow)  airflow slider: 0----*---100  [Set]           |  |
-|  +----------------------------------------------------------------------------+  |
-|  +----------------------------------------------------------------------------+  |
-|  | Bedroom  o OFF   (no sensor -> airflow only)                                |  |
-|  | Airflow: ##-------- 20%                                                    |  |
-|  | [ - ] [ + ]  airflow slider 0--*-----100  [Set]  [ON]                      |  |
-|  +----------------------------------------------------------------------------+  |
-+----------------------------------------------------------------------------------+
-```
+Top to bottom:
+
+- **System bar** (`#system` / `#connection-state`) -- a connection indicator, console address (e.g. `192.168.x.x`), ID (e.g. `#13`), firmware version, and a `[refresh]` button.
+- **AC units** (`#ac-<id>`) -- one card per AC. Each shows the name, power/mode (e.g. "Upstairs ON Heat" vs "Downstairs OFF"), fan speed, and setpoint vs current temp (e.g. `22.0 -> 23.0`).
+- **Zones** (`#zone-<id>`) -- one card per zone:
+  - A zone **with a sensor** (e.g. "Living Room") shows: power state with a filled marker when ON; a mode toggle between `% Airflow` and `Temp Setpoint`; a turbo/off button; current airflow as a bar and percent (e.g. 65%); sensor temperature (e.g. `24.3 C`) and setpoint (e.g. `23.0 C`); step `[ - ] [ + ]` buttons; and an airflow slider `0..100` with a `[Set]` button.
+  - A **sensor-less** zone (e.g. "Bedroom") shows power OFF with an open marker, airflow-only mode, current airflow percent (e.g. 20%), step buttons, an airflow slider, and `[Set]` / `[ON]` buttons.
 
 Zone card controls (matches section 5 endpoints):
 - **Mode toggle:** two segmented buttons `% Airflow` / `Temp Setpoint` -> `POST /zone/:id/control-type`.
@@ -420,43 +401,32 @@ Zone card controls (matches section 5 endpoints):
 
 ## 7. Project structure
 
-```
-aircon/
-+-- Cargo.toml
-+-- DESIGN.md
-+-- static/
-|   +-- vendor/                 # htmx.min.js, htmx-ext-sse.js (vendored)
-+-- templates/
-|   +-- index.html              # full page shell + SSE bootstrap
-|   +-- base.html               # <head>, htmx script tags, block content
-|   +-- partials/
-|   |   +-- system.html         # #system + #connection-state
-|   |   +-- acs.html
-|   |   +-- ac.html
-|   |   +-- zones.html
-|   |   +-- zone.html           # the swap target for #zone-<id>
-|   +-- macros.html             # shared bits (temp display, flags badges)
-+-- src/
-    +-- main.rs                 # tracing init, build ManagerHandle, serve axum
-    +-- config.rs               # listen addr, discovery timeout, log level
-    +-- manager/
-    |   +-- mod.rs              # ManagerHandle, spawn_manager(), supervisor loop
-    |   +-- command.rs          # Command / *Req enums
-    |   +-- snapshot.rs         # Snapshot + view types + crate->view mapping
-    +-- airtouch/
-    |   +-- mod.rs              # thin helpers: discover_with_retry(), prefill()
-    +-- web/
-    |   +-- mod.rs              # router builder, AppState
-    |   +-- state.rs            # AppState { manager: Arc<ManagerHandle> }
-    |   +-- error.rs            # AppError -> IntoResponse (renders a fragment err)
-    |   +-- sse.rs              # /events: convert watch<Snapshot> -> EventStream
-    |   +-- handlers/
-    |       +-- mod.rs
-    |       +-- pages.rs        # GET /, GET /partials/*
-    |       +-- zone.rs        # POST /zone/:id/*
-    |       +-- ac.rs           # POST /ac/:id/* (phase 2)
-    +-- templates.rs            # askama struct definitions mapping to templates
-```
+- `Cargo.toml`
+- `DESIGN.md`
+- `static/vendor/` -- vendored `htmx.min.js`, `htmx-ext-sse.js`
+- `templates/` -- askama templates:
+  - `index.html` -- full page shell + SSE bootstrap
+  - `base.html` -- `<head>`, htmx script tags, block content
+  - `partials/system.html` -- `#system` + `#connection-state`
+  - `partials/acs.html`, `partials/ac.html`, `partials/zones.html`
+  - `partials/zone.html` -- the swap target for `#zone-<id>`
+  - `macros.html` -- shared bits (temp display, flags badges)
+- `src/` -- Rust source:
+  - `main.rs` -- tracing init, build `ManagerHandle`, serve axum
+  - `config.rs` -- listen addr, discovery timeout, log level
+  - `manager/mod.rs` -- `ManagerHandle`, `spawn_manager()`, supervisor loop
+  - `manager/command.rs` -- `Command` / `*Req` enums
+  - `manager/snapshot.rs` -- `Snapshot` + view types + crate-to-view mapping
+  - `airtouch/mod.rs` -- thin helpers: `discover_with_retry()`, `prefill()`
+  - `web/mod.rs` -- router builder, `AppState`
+  - `web/state.rs` -- `AppState { manager: Arc<ManagerHandle> }`
+  - `web/error.rs` -- `AppError` -> `IntoResponse` (renders a fragment err)
+  - `web/sse.rs` -- `/events`: convert `watch<Snapshot>` -> `EventStream`
+  - `web/handlers/mod.rs`
+  - `web/handlers/pages.rs` -- `GET /`, `GET /partials/*`
+  - `web/handlers/zone.rs` -- `POST /zone/:id/*`
+  - `web/handlers/ac.rs` -- `POST /ac/:id/*` (phase 2)
+  - `templates.rs` -- askama struct definitions mapping to templates
 
 ---
 
