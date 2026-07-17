@@ -66,6 +66,13 @@
               hx-vals='{"enabled":"{% if config.idle_off_enabled %}false{% else %}true{% endif %}"}'
               hx-target="#automation" hx-swap="outerHTML">{% if config.idle_off_enabled %}Enabled{% else %}Disabled{% endif %}</button>
     </div>
+    {% if config.idle_off_enabled && idle.ac_on %}
+      {% if let Some(t) = idle.target_time %}
+      <div class="program-status wait">
+        Powering system off at {{ t }}
+      </div>
+      {% endif %}
+    {% endif %}
     <div class="program-param">
       <span class="label">Timeout</span>
       <div class="preset-group">

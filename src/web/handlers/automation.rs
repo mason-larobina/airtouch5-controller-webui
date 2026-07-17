@@ -69,7 +69,8 @@ fn render(state: &AppState) -> Html<String> {
     let cfg = state.automation.get();
     let snap = state.manager.snapshot_rx.borrow().clone();
     let status = state.automation.setpoint_off_status(&snap);
-    Html(templates::render_automation(&cfg, &status))
+    let idle = state.automation.idle_off_status(&snap);
+    Html(templates::render_automation(&cfg, &status, &idle))
 }
 
 fn parse_bool(s: &str) -> Result<bool, AppError> {

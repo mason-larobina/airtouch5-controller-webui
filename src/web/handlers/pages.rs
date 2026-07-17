@@ -13,7 +13,8 @@ pub async fn index(State(state): State<AppState>) -> Result<Html<String>, AppErr
     let snap = state.manager.snapshot_rx.borrow().clone();
     let cfg = state.automation.get();
     let status = state.automation.setpoint_off_status(&snap);
-    Ok(Html(templates::render_index(&snap, &cfg, &status)))
+    let idle = state.automation.idle_off_status(&snap);
+    Ok(Html(templates::render_index(&snap, &cfg, &status, &idle)))
 }
 
 /// `GET /partials/system`.
@@ -52,7 +53,8 @@ pub async fn partial_automation(State(state): State<AppState>) -> Html<String> {
     let cfg = state.automation.get();
     let snap = state.manager.snapshot_rx.borrow().clone();
     let status = state.automation.setpoint_off_status(&snap);
-    Html(templates::render_automation(&cfg, &status))
+    let idle = state.automation.idle_off_status(&snap);
+    Html(templates::render_automation(&cfg, &status, &idle))
 }
 
 /// `GET /partials/zone/:id`.

@@ -138,10 +138,25 @@ fn diff_events(prev: &Snapshot, new: &Snapshot, automation: &AutomationStore) ->
         }
     }
 
-    // Re-emit the automation card when the setpoint-off status (derived from
-    // the snapshot plus the shared countdown) changes, so the live "turning
-    // off in N min" / "waiting for setpoint" badge stays current.
-    if automation.setpoint_off_status(prev) != automation.setpoint_off_status(new) {
+    // A control-relevant change (power/mode/fan/setpoint/airflow) resets the
+    // idle auto-off countdown. The engine does the same on its own watch, but
+    // the SSE stream may read the shared instant before the engine writes it,
+    // so we also reset it here to guarantee the "powering off at HH:MM" target
+    // reflects this interaction immediately. Both writers set ~the same instant.
+    if crate::automation::control_fingerprint(prev)
+        != crate::automation::control_fingerprint(new)
+    {
+        automation.set_idle_last_change(Some(std::time::Instant::now()));
+    }
+
+    // Re-emit the automation card when either program's derived status
+    // (setpoint-off countdown or idle-off target time) changes, so the live
+    // badges stay current. The idle target time is a fixed wall-clock value
+    // that only shifts on a control change or timeout preset change, so this
+    // does not re-emit on every sensor-drift snapshot.
+    if automation.setpoint_off_status(prev) != automation.setpoint_off_status(new)
+        || automation.idle_off_status(prev) != automation.idle_off_status(new)
+    {
         out.push(named("automation", render_automation(automation, new)));
     }
 
@@ -152,7 +167,8 @@ fn diff_events(prev: &Snapshot, new: &Snapshot, automation: &AutomationStore) ->
 fn render_automation(automation: &AutomationStore, snap: &Snapshot) -> String {
     let cfg = automation.get();
     let status = automation.setpoint_off_status(snap);
-    templates::render_automation(&cfg, &status)
+    let idle = automation.idle_off_status(snap);
+    templates::render_automation(&cfg, &status, &idle)
 }
 
 /// Build a named SSE event whose data is an HTML fragment.

@@ -1652,3 +1652,154 @@ async fn setpoint_off_status_shows_countdown_badge() {
     })
     .await;
 }
+
+/// Enabling the idle auto-off program shows the "Powering system off at HH:MM"
+/// status line (the AC is on in the sample snapshot).
+#[tokio::test]
+async fn idle_off_status_shows_target_time() {
+    capped(async {
+        let (addr, _mock) = spawn_server().await;
+        let _ = client()
+            .post(format!("http://{addr}/automation/idle-off/toggle"))
+            .form(&[("enabled", "true")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let body = client()
+            .get(format!("http://{addr}/partials/automation"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let idle = program_card(&body, "idle-off");
+        assert!(
+            idle.contains("program-status wait"),
+            "expected an idle status badge: {idle}"
+        );
+        assert!(
+            idle.contains("Powering system off at "),
+            "expected the powering-off copy: {idle}"
+        );
+    })
+    .await;
+}
+
+/// Changing the idle timeout preset changes the displayed target time: the
+/// status line must reflect the new (later) shutoff time after the interaction.
+#[tokio::test]
+async fn idle_off_status_target_changes_with_timeout() {
+    capped(async {
+        let (addr, _mock) = spawn_server().await;
+        // Enable with the default 30m timeout and capture the target time.
+        let _ = client()
+            .post(format!("http://{addr}/automation/idle-off/toggle"))
+            .form(&[("enabled", "true")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let body = client()
+            .get(format!("http://{addr}/partials/automation"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let before = program_card(&body, "idle-off");
+        let t0 = target_time(before).expect("target time present before");
+
+        // Bump the timeout to 2h and re-render; the target must move later.
+        let body = client()
+            .post(format!("http://{addr}/automation/idle-off/timeout"))
+            .form(&[("mins", "120")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let after = program_card(&body, "idle-off");
+        let t1 = target_time(after).expect("target time present after");
+        assert_ne!(
+            t0, t1,
+            "target time should change after switching the timeout preset"
+        );
+    })
+    .await;
+}
+
+/// Extract the "HH:MM" target time from an idle program card's status line.
+fn target_time(card: &str) -> Option<String> {
+    let anchor = "Powering system off at ";
+    let rest = card.split(anchor).nth(1)?;
+    let hhmm = rest.split('<').next()?.trim();
+    if hhmm.len() == 5 && hhmm.as_bytes()[2] == b':' {
+        Some(hhmm.to_string())
+    } else {
+        None
+    }
+}
+
+
+/// The SSE initial full render emits an `automation` event carrying the idle
+/// auto-off "Powering system off at HH:MM" status line once the program is
+/// enabled, so a freshly-connected browser shows the target time live.
+#[tokio::test]
+async fn sse_initial_render_emits_idle_status() {
+    capped(async {
+        let (addr, _mock) = spawn_server().await;
+        // Enable the idle program so the countdown (and target time) is active.
+        let _ = client()
+            .post(format!("http://{addr}/automation/idle-off/toggle"))
+            .form(&[("enabled", "true")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        let resp = client()
+            .get(format!("http://{addr}/events"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::OK);
+        let mut stream = resp.bytes_stream();
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let mut buf = Vec::<u8>::new();
+        let mut saw_idle_status = false;
+        while !saw_idle_status {
+            let chunk = tokio::time::timeout_at(deadline, stream.next())
+                .await
+                .expect("SSE timed out waiting for the automation event");
+            let chunk = chunk.expect("stream errored").expect("chunk errored");
+            buf.extend_from_slice(&chunk);
+            while let Some(idx) = buf.windows(2).position(|w| w == b"\n\n") {
+                let raw = buf.drain(..idx + 2).collect::<Vec<_>>();
+                if let Some((event, data)) = parse_sse_event(&raw) {
+                    if event == "automation"
+                        && data.contains("Powering system off at ")
+                        && target_time(&data).is_some()
+                    {
+                        saw_idle_status = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            saw_idle_status,
+            "initial SSE render should include the idle target-time status"
+        );
+    })
+    .await;
+}

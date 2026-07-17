@@ -134,6 +134,10 @@ pub struct AutomationStore {
     config: Arc<RwLock<AutomationConfig>>,
     path: Option<PathBuf>,
     setpoint_since: Arc<RwLock<Option<Instant>>>,
+    /// The instant of the last control-relevant state change, used by both the
+    /// idle auto-off engine (to measure elapsed idle time) and the web layer
+    /// (to compute the "powering off at HH:MM" target). Volatile: not persisted.
+    idle_last_change: Arc<RwLock<Option<Instant>>>,
 }
 
 impl AutomationStore {
@@ -144,6 +148,7 @@ impl AutomationStore {
             config: Arc::new(RwLock::new(config)),
             path: None,
             setpoint_since: Arc::new(RwLock::new(None)),
+            idle_last_change: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -163,6 +168,7 @@ impl AutomationStore {
             config: Arc::new(RwLock::new(config)),
             path: Some(path),
             setpoint_since: Arc::new(RwLock::new(None)),
+            idle_last_change: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -193,6 +199,31 @@ impl AutomationStore {
     /// shared countdown instant and the given snapshot.
     pub fn setpoint_off_status(&self, snap: &Snapshot) -> SetpointOffStatus {
         setpoint_off_status(snap, &self.get(), self.setpoint_since())
+    }
+
+    /// The instant of the last control-relevant change, if the idle auto-off
+    /// countdown is running (None when the program is disabled or has not yet
+    /// started). Written by the engine and the enable handler; read by the
+    /// web layer for the "powering off at HH:MM" badge.
+    pub fn idle_last_change(&self) -> Option<Instant> {
+        *self
+            .idle_last_change
+            .read()
+            .expect("idle_last_change lock poisoned")
+    }
+
+    /// Replace the idle last-change instant. Engine + enable-handler writer.
+    pub fn set_idle_last_change(&self, since: Option<Instant>) {
+        *self
+            .idle_last_change
+            .write()
+            .expect("idle_last_change lock poisoned") = since;
+    }
+
+    /// Compute the live idle auto-off UI status from the current config, the
+    /// shared last-change instant and the given snapshot.
+    pub fn idle_off_status(&self, snap: &Snapshot) -> IdleOffStatus {
+        idle_off_status(snap, &self.get(), self.idle_last_change())
     }
 
     /// Apply a mutation and persist it (if a path is set). Returns an error
@@ -232,9 +263,16 @@ impl AutomationStore {
         self.update(|c| c.setpoint_off_hold = Duration::from_secs(minutes * 60))
     }
 
-    /// Enable/disable the idle auto-off program.
+    /// Enable/disable the idle auto-off program. Enabling (re)starts the idle
+    /// countdown so the UI badge shows a fresh target time and the engine does
+    /// not fire immediately from a stale last-change. Disabling clears the
+    /// countdown so the badge disappears right away.
     pub fn set_idle_off_enabled(&self, enabled: bool) -> Result<(), String> {
-        self.update(|c| c.idle_off_enabled = enabled)
+        let res = self.update(|c| c.idle_off_enabled = enabled);
+        if res.is_ok() {
+            self.set_idle_last_change(if enabled { Some(Instant::now()) } else { None });
+        }
+        res
     }
 
     /// Set the idle auto-off timeout (in minutes). Rejects values that are not
@@ -296,7 +334,12 @@ pub fn spawn_automation(
 
         let mut rx = manager.snapshot_rx.clone();
         let mut last_fp = control_fingerprint(&rx.borrow());
-        let mut last_change = Instant::now();
+        // Seed the idle countdown at engine start (mirrors the original
+        // `last_change = Instant::now()`) unless a value is already present
+        // (e.g. the enable handler just set it).
+        if store.idle_last_change().is_none() {
+            store.set_idle_last_change(Some(Instant::now()));
+        }
 
         let mut interval = tokio::time::interval(tick_interval);
         // A burst of catch-up ticks after a stall (e.g. the process was
@@ -317,7 +360,10 @@ pub fn spawn_automation(
                             let fp = control_fingerprint(&snap);
                             if fp != last_fp {
                                 last_fp = fp;
-                                last_change = Instant::now();
+                                // A real control change resets the idle
+                                // countdown; the shared store mirrors it so the
+                                // UI "powering off at HH:MM" target updates.
+                                store.set_idle_last_change(Some(Instant::now()));
                             }
                         }
                         Err(_) => {
@@ -363,19 +409,33 @@ pub fn spawn_automation(
                     }
 
                     // (2) Idle auto-off.
-                    if cfg.idle_off_enabled
-                        && any_ac_on(&snap)
-                        && last_change.elapsed() >= cfg.idle_off_timeout
-                    {
-                        tracing::info!(
-                            "automation: idle auto-off firing (idle {:?})",
-                            last_change.elapsed()
-                        );
-                        turn_off_acs(&manager, &snap).await;
-                        // Reset so we do not re-fire on the next tick; the
-                        // power-off publish will also reset `last_change`
-                        // via the changed() arm.
-                        last_change = Instant::now();
+                    if cfg.idle_off_enabled {
+                        let last_change = store.idle_last_change();
+                        // No countdown running (e.g. just enabled without a
+                        // control change yet): start it now.
+                        let last_change = match last_change {
+                            Some(lc) => lc,
+                            None => {
+                                let now = Instant::now();
+                                store.set_idle_last_change(Some(now));
+                                now
+                            }
+                        };
+                        if any_ac_on(&snap)
+                            && last_change.elapsed() >= cfg.idle_off_timeout
+                        {
+                            tracing::info!(
+                                "automation: idle auto-off firing (idle {:?})",
+                                last_change.elapsed()
+                            );
+                            turn_off_acs(&manager, &snap).await;
+                            // Reset so we do not re-fire on the next tick; the
+                            // power-off publish will also reset the countdown
+                            // via the changed() arm.
+                            store.set_idle_last_change(Some(Instant::now()));
+                        }
+                    } else if store.idle_last_change().is_some() {
+                        store.set_idle_last_change(None);
                     }
                 }
             }
@@ -508,12 +568,76 @@ fn setpoint_detail(snap: &Snapshot) -> (bool, usize, usize) {
     (at_setpoint, satisfied, on_zones)
 }
 
+/// Live, derived status of the idle auto-off program for the UI. It reports the
+/// wall-clock time at which the engine will power the system off if no further
+/// control change happens. The target time is fixed at the moment of the last
+/// control change (plus the configured timeout), so it only shifts when the
+/// user interacts with the system or changes the timeout preset -- it does not
+/// tick as time passes. The web layer recomputes this on every snapshot change
+/// but the SSE diff only re-emits the card when the formatted time actually
+/// changes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct IdleOffStatus {
+    /// Whether the program is enabled (copied from config for convenience).
+    pub enabled: bool,
+    /// Whether at least one AC is currently On (the program is eligible).
+    pub ac_on: bool,
+    /// The wall-clock shutoff time as "HH:MM" (24-hour, local time), or None
+    /// when the program is disabled / no AC is on / the countdown has not
+    /// started. None hides the status line.
+    pub target_time: Option<String>,
+}
+
+/// Compute the idle auto-off status for the UI from the live snapshot, the
+/// program config and the shared last-control-change instant. The target time
+/// is `last_change + timeout` expressed as local wall clock.
+pub fn idle_off_status(
+    snap: &Snapshot,
+    cfg: &AutomationConfig,
+    last_change: Option<Instant>,
+) -> IdleOffStatus {
+    let ac_on = any_ac_on(snap);
+    let target_time = if cfg.idle_off_enabled && ac_on {
+        last_change
+            .and_then(|lc| instant_to_local(lc + cfg.idle_off_timeout))
+            .map(|dt| dt.format("%H:%M").to_string())
+    } else {
+        None
+    };
+    IdleOffStatus {
+        enabled: cfg.idle_off_enabled,
+        ac_on,
+        target_time,
+    }
+}
+
+/// Convert a monotonic [`Instant`] to a local wall-clock [`DateTime<Local>`],
+/// using a baseline pair captured on first use (a monotonic instant and the
+/// matching system time). Conversion is relative to that baseline, so it stays
+/// correct across short runs without needing a persistent clock reference.
+/// Returns None only if the system time is before the Unix epoch (which would
+/// be a broken clock).
+fn instant_to_local(instant: Instant) -> Option<chrono::DateTime<chrono::Local>> {
+    use std::sync::OnceLock;
+    use std::time::SystemTime;
+    static BASE_INSTANT: OnceLock<Instant> = OnceLock::new();
+    static BASE_SYSTEM: OnceLock<SystemTime> = OnceLock::new();
+    let base_i = *BASE_INSTANT.get_or_init(Instant::now);
+    let base_s = *BASE_SYSTEM.get_or_init(SystemTime::now);
+    // Offset of `instant` from the baseline instant. `saturating_elapsed_since`
+    // yields 0 when `instant` predates the baseline (e.g. a last-change captured
+    // before the first render); the result is then off by at most the startup
+    // gap, which the minute-granular format absorbs.
+    let off = instant.saturating_duration_since(base_i);
+    Some(chrono::DateTime::<chrono::Local>::from(base_s + off))
+}
+
 /// A compact, stable string summarising the *control* state of the system --
 /// everything a user (or the wall console) could change that should reset the
 /// idle timer. Crucially excludes the live sensor readings and AC "now"
 /// temperatures, which drift continuously and would otherwise keep the idle
 /// timer alive forever.
-fn control_fingerprint(snap: &Snapshot) -> String {
+pub fn control_fingerprint(snap: &Snapshot) -> String {
     let mut s = String::new();
     for (id, z) in &snap.zones {
         s.push_str(&format!(
@@ -896,5 +1020,66 @@ mod tests {
         let st = setpoint_off_status(&s, &cfg, since);
         assert!(st.at_setpoint);
         assert_eq!(st.remaining_min, 0, "remaining should clamp to 0");
+    }
+
+    /// The idle status reports a wall-clock target time shaped "HH:MM" when
+    /// the program is enabled and an AC is on, and None otherwise. The target
+    /// is `last_change + timeout`; here we check it is Some and well-formed.
+    #[test]
+    fn idle_status_target_time_when_enabled_and_ac_on() {
+        let s = snap_with_zone(23.0, 23.0); // AC on.
+        let cfg = AutomationConfig {
+            idle_off_enabled: true,
+            idle_off_timeout: Duration::from_secs(30 * 60),
+            ..AutomationConfig::default()
+        };
+        let lc = Instant::now();
+        let st = idle_off_status(&s, &cfg, Some(lc));
+        assert!(st.enabled && st.ac_on);
+        let t = st.target_time.expect("target time should be set");
+        assert!(t.len() == 5 && t.as_bytes()[2] == b':', "HH:MM shape: {t}");
+    }
+
+    /// No AC on -> no target time (nothing to power off).
+    #[test]
+    fn idle_status_no_target_when_ac_off() {
+        let mut s = snap_with_zone(23.0, 23.0);
+        s.acs.get_mut(&0).unwrap().status.as_mut().unwrap().power = Some("Off");
+        let cfg = AutomationConfig {
+            idle_off_enabled: true,
+            ..AutomationConfig::default()
+        };
+        let st = idle_off_status(&s, &cfg, Some(Instant::now()));
+        assert!(st.target_time.is_none(), "no target when AC is off");
+    }
+
+    /// Disabled program -> no target time regardless of the countdown.
+    #[test]
+    fn idle_status_no_target_when_disabled() {
+        let s = snap_with_zone(23.0, 23.0);
+        let cfg = AutomationConfig {
+            idle_off_enabled: false,
+            ..AutomationConfig::default()
+        };
+        let st = idle_off_status(&s, &cfg, Some(Instant::now()));
+        assert!(st.target_time.is_none());
+    }
+
+    /// The target time is fixed at `last_change + timeout`; it does not shift
+    /// as time passes (only on a new control change), so two reads with the
+    /// same last_change yield the same formatted time.
+    #[test]
+    fn idle_status_target_is_stable() {
+        let s = snap_with_zone(23.0, 23.0);
+        let cfg = AutomationConfig {
+            idle_off_enabled: true,
+            idle_off_timeout: Duration::from_secs(30 * 60),
+            ..AutomationConfig::default()
+        };
+        let lc = Instant::now();
+        let a = idle_off_status(&s, &cfg, Some(lc)).target_time;
+        std::thread::sleep(Duration::from_millis(50));
+        let b = idle_off_status(&s, &cfg, Some(lc)).target_time;
+        assert_eq!(a, b, "target time must not drift as time passes");
     }
 }
