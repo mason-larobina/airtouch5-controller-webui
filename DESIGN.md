@@ -7,6 +7,7 @@ via **htmx-sse** (Server-Sent Events). Server-rendered HTML fragments are emitte
 over SSE and swapped in-place by the browser - no client-side JS framework.
 
 > Stack decisions (confirmed):
+>
 > - **Server:** `axum`
 > - **Templating:** `askama` (compile-time Jinja-like `.html` templates)
 > - **Live updates:** SSE delivering **HTML fragments** swapped via `hx-sse`
@@ -18,6 +19,7 @@ over SSE and swapped in-place by the browser - no client-side JS framework.
 ## 1. Goals & scope
 
 **In scope (phase 1):**
+
 - Discover the AirTouch 5 console on the LAN and connect.
 - Show system status (console name/address/id, firmware versions, AC count, zone count, connection state).
 - Enumerate AC units (with capabilities) and zones (with names).
@@ -28,12 +30,6 @@ over SSE and swapped in-place by the browser - no client-side JS framework.
   - Switch zone control mode between **airflow %** and **temperature setpoint** (only for zones with a sensor).
   - Adjust value: increment / decrement, set airflow % directly, set temperature setpoint.
 - Live updates pushed to all connected browsers over SSE.
-
-**Explicitly out of scope (phase 1):**
-- AC unit control UI (power/mode/fan/setpoint) - designed but lower priority; see section 8.
-- Authentication, multi-user, multi-console selection.
-- Persisting/caching the discovered console address across restarts.
-- Timers/schedules.
 
 ---
 
@@ -58,8 +54,8 @@ Vendor **latest htmx** (2.x) and the **`sse` extension** under **versioned,
 un-minified** paths in `static/vendor/`, e.g.:
 
 ```
-static/vendor/htmx/2.0.4/htmx.js               # un-minified, readable
-static/vendor/htmx-ext-sse/2.0.4/sse.js        # from the htmx-extensions repo
+static/vendor/htmx-2.0.4.js               # un-minified, readable
+static/vendor/htmx-ext-sse-2.0.4.js        # from the htmx-extensions repo
 ```
 
 Serve them via `tower_http::services::ServeDir` mounted at `/vendor` with a
@@ -68,7 +64,7 @@ Serve them via `tower_http::services::ServeDir` mounted at `/vendor` with a
 path in `<script src=...>` so a version bump is a cache-bust.
 
 > **htmx SSE note:** SSE-driven fragment swapping needs the `sse` extension
-> (`hx-ext="sse"`, `sse-connect`, `sse-swap`) loaded *after* core htmx.
+> (`hx-ext="sse"`, `sse-connect`, `sse-swap`) loaded _after_ core htmx.
 
 ---
 
@@ -202,24 +198,24 @@ struct ZoneView {
 
 ### 3.4 Mapping details (crate -> view)
 
-| crate type (`types::status`) | view field | notes |
-|---|---|---|
-| `AcStatus.power: Option<AcPower>` | `AcStatusView.power` | `On/Off/AwayOff/AwayOn/Sleep` |
-| `AcStatus.mode: Option<AcMode>` | `.mode` | `Auto/Heat/Dry/Fan/Cool/AutoHeat/AutoCool` |
-| `AcStatus.fan_speed: Option<(FanSpeed,bool)>` | `.fan_speed` | bool = IntelligentAuto modifier |
-| `AcStatus.setpoint/temperature: Option<Temperature>` | kept as `Temperature` | render via Display |
-| `AcFlags` (bitflags) | `.flags: Vec<&str>` | `iter_names()` |
-| `ZoneStatus.power: ZonePower` | `ZoneView.power` | `Off/On/Turbo` (status enum) |
-| `ZoneStatus.control: ZoneControl` | `.control_mode` + `.airflow_pct` + `.setpoint` | `Airflow(pct)` -> Airflow mode, pct=pct; `Temperature(pct,temp)` -> Temp mode, pct=pct, setpoint=Some(temp) |
-| `ZoneStatus.sensor_reading: ZoneSensorReading` | `.has_sensor` + `.sensor` | `NoSensor`->false/None; `NotAvailable`->true/Some(NA); `Temperature(t)`->true/Some(t) |
-| `ZoneFlags` (bitflags) | `.flags` | `LowBattery/Spill` |
+| crate type (`types::status`)                         | view field                                     | notes                                                                                                       |
+| ---------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `AcStatus.power: Option<AcPower>`                    | `AcStatusView.power`                           | `On/Off/AwayOff/AwayOn/Sleep`                                                                               |
+| `AcStatus.mode: Option<AcMode>`                      | `.mode`                                        | `Auto/Heat/Dry/Fan/Cool/AutoHeat/AutoCool`                                                                  |
+| `AcStatus.fan_speed: Option<(FanSpeed,bool)>`        | `.fan_speed`                                   | bool = IntelligentAuto modifier                                                                             |
+| `AcStatus.setpoint/temperature: Option<Temperature>` | kept as `Temperature`                          | render via Display                                                                                          |
+| `AcFlags` (bitflags)                                 | `.flags: Vec<&str>`                            | `iter_names()`                                                                                              |
+| `ZoneStatus.power: ZonePower`                        | `ZoneView.power`                               | `Off/On/Turbo` (status enum)                                                                                |
+| `ZoneStatus.control: ZoneControl`                    | `.control_mode` + `.airflow_pct` + `.setpoint` | `Airflow(pct)` -> Airflow mode, pct=pct; `Temperature(pct,temp)` -> Temp mode, pct=pct, setpoint=Some(temp) |
+| `ZoneStatus.sensor_reading: ZoneSensorReading`       | `.has_sensor` + `.sensor`                      | `NoSensor`->false/None; `NotAvailable`->true/Some(NA); `Temperature(t)`->true/Some(t)                       |
+| `ZoneFlags` (bitflags)                               | `.flags`                                       | `LowBattery/Spill`                                                                                          |
 
 Zone->AC ownership: while building the snapshot, for each `AcCapability`, assign
 `ac_id` to zones in `zone_start_index .. zone_start_index + zone_count`.
 
 > WARNING: **Two different `ZonePower` enums:** `types::status::ZonePower`
-> (`Off/On/Turbo`) is *what the zone is doing now*; `types::control::ZonePower`
-> (`Toggle/Off/On/Turbo`) is a *command*. They are distinct types despite the
+> (`Off/On/Turbo`) is _what the zone is doing now_; `types::control::ZonePower`
+> (`Toggle/Off/On/Turbo`) is a _command_. They are distinct types despite the
 > shared name. Same for `AcPower`/`AcMode`/`FanSpeed` (status vs control variants).
 > The mapping functions must use the correct module for each direction.
 
@@ -254,6 +250,7 @@ the async `watch` update will confirm/reconcile shortly after.
 ## 4. airtouch5 API surface we use (reference)
 
 Discovery:
+
 ```rust
 use airtouch5::discovery::{discover_timeout, Console, DiscoveryError};
 let console: Console = discover_timeout(Some(Duration::from_secs(3))).await?;
@@ -261,6 +258,7 @@ let console: Console = discover_timeout(Some(Duration::from_secs(3))).await?;
 ```
 
 Connection (all methods take `&self`; not `Clone`):
+
 ```rust
 let at5 = AirTouch5::with_ipaddr(console.address).await?;
 let caps   = at5.ac_capabilities().await?;   // AcCapabilityResponse, .by_index()
@@ -272,6 +270,7 @@ let zones  = at5.zone_status().await?;       // ZoneStatusMessage { zones: BTree
 ```
 
 Live updates:
+
 ```rust
 let status_rx  = at5.subscribe_status().expect("conn alive");  // watch::Receiver<CurrentStatus>
 // CurrentStatus.acs(): &AcStatusSet, .zones(): &ZoneStatusSet
@@ -280,6 +279,7 @@ let changes_rx = at5.subscribe_changes();                        // Option<broad
 ```
 
 Control (`feature = "control"`):
+
 ```rust
 use airtouch5::types::control::{ZoneControl, ZoneControlType, ZoneControlValue, ZonePower};
 use airtouch5::types::Temperature;
@@ -300,6 +300,7 @@ at5.shutdown().await?; // graceful; also dropped on Drop (io_loop signaled)
 ```
 
 Constraints:
+
 - Setpoint temperatures must satisfy `Temperature::is_setpoint_valid()` -> **10.0-25.0 C**.
 - Airflow percentages: **0-100** inclusive; out of range -> `Err(InvalidData)`.
 - `ZoneControl.control` must be `None` for sensor-less zones (cannot temp-control them).
@@ -312,29 +313,31 @@ All fragment responses are `text/html` (partial). Status updates are pushed over
 single SSE stream.
 
 ### Pages & fragments
-| Method | Path | Returns | Notes |
-|---|---|---|---|
-| GET | `/` | `index.html` | shell + initial inline fragments (server-rendered) |
-| GET | `/partials/system` | `system.html` | console card |
-| GET | `/partials/acs` | `acs.html` | AC unit cards |
-| GET | `/partials/zones` | `zones.html` | all zone cards |
-| GET | `/partials/zone/:id` | `zone.html` | single zone card (targeted swap target) |
-| GET | `/partials/ac/:id` | `ac.html` | single AC card |
+
+| Method | Path                 | Returns       | Notes                                              |
+| ------ | -------------------- | ------------- | -------------------------------------------------- |
+| GET    | `/`                  | `index.html`  | shell + initial inline fragments (server-rendered) |
+| GET    | `/partials/system`   | `system.html` | console card                                       |
+| GET    | `/partials/acs`      | `acs.html`    | AC unit cards                                      |
+| GET    | `/partials/zones`    | `zones.html`  | all zone cards                                     |
+| GET    | `/partials/zone/:id` | `zone.html`   | single zone card (targeted swap target)            |
+| GET    | `/partials/ac/:id`   | `ac.html`     | single AC card                                     |
 
 ### SSE
-| Method | Path | Returns |
-|---|---|---|
-| GET | `/events` | `text/event-stream` |
+
+| Method | Path      | Returns             |
+| ------ | --------- | ------------------- |
+| GET    | `/events` | `text/event-stream` |
 
 SSE event types & payloads (each `data:` is an HTML fragment with a stable
 `id="..."` matching what the client expects to swap):
 
-| event | `data:` | browser target |
-|---|---|---|
-| `system` | `<div id="system" ...>...</div>` | swap `#system` |
-| `ac` | `<div id="ac-<id>" ...>...</div>` | swap `#ac-<id>` |
-| `zone` | `<div id="zone-<id>" ...>...</div>` | swap `#zone-<id>` |
-| `state` | `<div id="connection-state" ...>...</div>` | connected/disconnected banner |
+| event    | `data:`                                    | browser target                |
+| -------- | ------------------------------------------ | ----------------------------- |
+| `system` | `<div id="system" ...>...</div>`           | swap `#system`                |
+| `ac`     | `<div id="ac-<id>" ...>...</div>`          | swap `#ac-<id>`               |
+| `zone`   | `<div id="zone-<id>" ...>...</div>`        | swap `#zone-<id>`             |
+| `state`  | `<div id="connection-state" ...>...</div>` | connected/disconnected banner |
 
 **Per-id dirty diffing (chosen from the start):** the SSE handler keeps the previous
 `Snapshot` (clone). On each `snapshot_rx.changed()` it diffs `prev.zones` vs
@@ -345,22 +348,25 @@ vanish are not re-emitted (a zone/ac count change is rare in phase 1 and is cove
 by a full `system` re-render on reconnect).
 
 Client wiring (in `index.html`):
+
 ```html
 <div hx-ext="sse" sse-connect="/events">
   <!-- each sse-swap swaps the matching fragment by id -->
 </div>
 ```
+
 Each fragment element that should auto-update carries its own `sse-swap` attribute
 matching the event name (e.g. `<div id="zone-3" sse-swap="zone" hx-swap="outerHTML">`).
 
 ### Control endpoints (zones - phase 1)
-| Method | Path | Form fields | Action |
-|---|---|---|---|
-| POST | `/zone/:id/power` | `power=on|off|turbo` | `ZonePower` |
-| POST | `/zone/:id/control-type` | `type=airflow|temperature` | `ZoneControlType` (temp rejected if `!has_sensor`) |
-| POST | `/zone/:id/step` | `dir=up|down` | `ZoneControlValue::Increment`/`Decrement` |
-| POST | `/zone/:id/airflow` | `pct=0..100` | `ZoneControlValue::Airflow(pct)` |
-| POST | `/zone/:id/setpoint` | `temp=10.0..25.0` | `ZoneControlValue::Temperature(t)` |
+
+| Method | Path                     | Form fields       | Action                             |
+| ------ | ------------------------ | ----------------- | ---------------------------------- | -------------------------------------------------- | ----------- |
+| POST   | `/zone/:id/power`        | `power=on         | off                                | turbo`                                             | `ZonePower` |
+| POST   | `/zone/:id/control-type` | `type=airflow     | temperature`                       | `ZoneControlType` (temp rejected if `!has_sensor`) |
+| POST   | `/zone/:id/step`         | `dir=up           | down`                              | `ZoneControlValue::Increment`/`Decrement`          |
+| POST   | `/zone/:id/airflow`      | `pct=0..100`      | `ZoneControlValue::Airflow(pct)`   |
+| POST   | `/zone/:id/setpoint`     | `temp=10.0..25.0` | `ZoneControlValue::Temperature(t)` |
 
 Each POST handler: send `Command` -> await reply -> render the affected `zone.html`
 fragment -> return it. The browser swaps it in (htmx `hx-target`/`hx-swap`).
@@ -368,12 +374,13 @@ The subsequent async watch update may re-emit the same fragment over SSE; that's
 fine (idempotent swap). Response `HX-Redirect`/`HX-Trigger` not needed.
 
 ### Control endpoints (AC units - phase 2)
-| Method | Path | Form fields | Action |
-|---|---|---|---|
-| POST | `/ac/:id/power` | `power=on|off|away|sleep|toggle` | `AcPower` (control enum) |
-| POST | `/ac/:id/mode` | `mode=auto|heat|dry|fan|cool` | `AcMode` |
-| POST | `/ac/:id/fan` | `fan=auto|quiet|low|medium|high|powerful|turbo` | `FanSpeed` |
-| POST | `/ac/:id/setpoint` | `temp=<float>` | `setpoint` (validated against AC's cool/heat range) |
+
+| Method | Path               | Form fields    | Action                                              |
+| ------ | ------------------ | -------------- | --------------------------------------------------- | ---- | ------ | ------- | ------------------------ | ------ | ---------- |
+| POST   | `/ac/:id/power`    | `power=on      | off                                                 | away | sleep  | toggle` | `AcPower` (control enum) |
+| POST   | `/ac/:id/mode`     | `mode=auto     | heat                                                | dry  | fan    | cool`   | `AcMode`                 |
+| POST   | `/ac/:id/fan`      | `fan=auto      | quiet                                               | low  | medium | high    | powerful                 | turbo` | `FanSpeed` |
+| POST   | `/ac/:id/setpoint` | `temp=<float>` | `setpoint` (validated against AC's cool/heat range) |
 
 ---
 
@@ -388,6 +395,7 @@ Top to bottom:
   - A **sensor-less** zone (e.g. "Bedroom") shows power OFF with an open marker, airflow-only mode, current airflow percent (e.g. 20%), step buttons, an airflow slider, and `[Set]` / `[ON]` buttons.
 
 Zone card controls (matches section 5 endpoints):
+
 - **Mode toggle:** two segmented buttons `% Airflow` / `Temp Setpoint` -> `POST /zone/:id/control-type`.
   The temperature option is disabled (`disabled`, `aria-disabled`) when `!has_sensor`.
 - **Step:** `-` / `+` -> `POST /zone/:id/step` (`dir=down|up`). Works in either mode
@@ -427,104 +435,3 @@ Zone card controls (matches section 5 endpoints):
   - `web/handlers/zone.rs` -- `POST /zone/:id/*`
   - `web/handlers/ac.rs` -- `POST /ac/:id/*` (phase 2)
   - `templates.rs` -- askama struct definitions mapping to templates
-
----
-
-## 8. Implementation TODOs
-
-Phased. Check off as you go.
-
-### Phase 0 - scaffolding
-- [ ] Update `Cargo.toml` with deps in section 2; enable `airtouch5` `control` feature.
-- [ ] `tracing_subscriber::fmt().init()` + `tower_http::trace::TraceLayer`.
-- [ ] Vendor latest htmx (2.x) + `sse` extension, **un-minified**, under versioned
-      paths in `static/vendor/` (e.g. `htmx/2.0.4/htmx.js`, `htmx-ext-sse/2.0.4/sse.js`);
-      mount `ServeDir` at `/vendor` with `Cache-Control: public, max-age=31536000, immutable`;
-      reference the versioned paths in `<script src>` so bumps cache-bust.
-- [ ] Add `askama` template dir + `#[derive(Template)]` stubs (`templates.rs`).
-
-### Phase 1a - connection manager
-- [ ] `manager/snapshot.rs`: define `Snapshot`, `ConsoleInfo`, `AcView`,
-      `AcStatusView`, `ZoneView`, `ControlModeView`, `SensorView`.
-- [ ] Mapping functions: `AcStatus->AcStatusView`, `ZoneStatus->ZoneView`,
-      `AcCapability->AcView (static part)`, bitflags->`Vec<&str>`, zone->AC ownership.
-      (Use `types::status::` enums for status; `types::control::` only in handlers.)
-- [ ] `manager/command.rs`: `Command`, `ZoneControlReq`, `AcControlReq`.
-- [ ] `manager/mod.rs`: `ManagerHandle { snapshot_rx, cmd_tx }` + `Clone`.
-- [ ] `airtouch/mod.rs`: `discover_with_retry()` (backoff), `prefill(&AirTouch5)`
-      (`try_join` of caps+names+version+status).
-- [ ] Supervisor loop (`select!` over cmd_rx, `status_rx.changed()`, shutdown).
-      Reconnect on `status_rx` error -> rebuild from step 1.
-- [ ] Snapshot rebuild: merge static (caps/names/version/console) + live
-      (`CurrentStatus.acs()`/`.zones()`) -> `Snapshot`; publish via `watch::send`.
-
-### Phase 1b - web layer (read-only first)
-- [ ] `web/state.rs` AppState; router with `/`, `/partials/*`, `/events`.
-- [ ] Templates: `index.html`, `partials/{system,zones,zone}.html`.
-- [ ] Render initial page from `snapshot_rx.borrow().clone()`.
-- [ ] `web/sse.rs`: subscribe to `snapshot_rx`; keep a prev `Snapshot`; on
-      `changed()` do a per-id diff (view types `PartialEq`) and emit only the
-      changed `system`/`ac`/`zone`/`state` fragments (see section 5).
-- [ ] Manual smoke test against a real (or mocked) console.
-
-### Phase 1c - zone control
-- [ ] `handlers/zone.rs`: implement the 5 POST endpoints from section 5.
-- [ ] Form -> `ZoneControlReq` -> `Command::ControlZone` -> await reply -> render
-      `zone.html`. Return `400` (with inline error) for: temp on sensor-less
-      zone, out-of-range airflow, invalid setpoint.
-- [ ] Wire htmx attributes in `zone.html` (`hx-post`, `hx-target="#zone-<id>"`,
-      `hx-swap="outerHTML"`). Debounce slider with `hx-trigger`.
-- [ ] End-to-end: toggle power, switch %<->temp, step, set airflow, set setpoint.
-
-### Phase 1d - polish
-- [ ] Connection-state banner over SSE (`#connection-state`).
-- [ ] Disable `Temp Setpoint` button when `!has_sensor`.
-- [ ] Clamp/validate setpoint to 10.0-25.0 (and warn if outside AC capability range).
-- [ ] Show AC errors (`error: Option<u16>`) and zone flags (`LowBattery`,`Spill`).
-- [ ] `tower_http::trace` + structured logs at INFO, DEBUG for AT5 frames.
-- [ ] Graceful shutdown on SIGINT (drain SSE, `AirTouch5::shutdown()`).
-
-### Phase 2 - AC unit control
-- [ ] `handlers/ac.rs`: power/mode/fan/setpoint endpoints (section 5 phase-2 table).
-- [ ] `partials/ac.html`: mode buttons (filtered by `supported_modes`), fan buttons
-      (filtered by `supported_fan_speeds`), setpoint constrained to AC cool/heat range.
-- [ ] SSE `ac` events; ensure `ac.html` is an `#ac-<id>` swap target.
-
-### Phase 3 - robustness & niceties
-- [ ] Reconnect backoff with jitter; surface retries in the UI banner.
-- [ ] Optional: cache discovered console address to a file for faster reconnect.
-- [ ] Optional: AC toggle smart logic (on<->off based on current `AcStatus.power`).
-- [ ] Tests (deferred from phase 1): if needed, add a thin `trait At5` around the
-      `airtouch5` methods we use + a `FakeAt5` to drive the manager end-to-end.
-      The manager stays concretely tied to `AirTouch5` until then.
-
----
-
-## 9. Resolved questions & residual risks
-
-**Resolved (decisions locked in):**
-
-1. **Testability.** Skip automated tests in phase 1 - the manager stays concretely
-   tied to `AirTouch5` (no `At5` trait). Pure-function transforms are easily testable
-   later via public crate constructors (`AcStatusMessage::new(...).into()` ->
-   `AcStatusSet`, `CurrentStatus::default()` + `apply(StatusChange::...)`), so a
-   trait is only worth adding to drive the *async glue* in tests. Deferred to
-   phase 3 if needed.
-2. **`Temperature` has no numeric getter.** Accepted. Render via `Display`
-   (`format!("{:#}", t)`), parse the `Display` string for input defaults; controls
-   use `Increment`/`Decrement`/`Airflow(pct)`/`Temperature::from_float`. Optionally
-   contribute an upstream accessor later.
-3. **SSE fan-out.** Per-id dirty tracking **from the start** (not a phase-3
-   optimization): view types derive `PartialEq`; the SSE handler diffs prev vs new
-   `Snapshot` and emits only changed `system`/`ac`/`zone`/`state` fragments.
-4. **htmx assets.** Vendor **latest htmx** (2.x) + the `sse` extension, **un-minified**,
-   under versioned paths with `Cache-Control: public, max-age=31536000, immutable`.
-
-**Residual risks (noted, no action in phase 1):**
-
-- **Multiple consoles on one LAN.** `discover_timeout()` returns the first responder
-  -> non-deterministic on multi-console networks. Accepted (section 1 out of scope); only
-  revisit if a real deployment hits it.
-- **Zone-name non-ASCII encoding bug.** The crate already decodes via lossy UTF-8 in
-  `zone_names()`; names may appear truncated/garbled for non-ASCII. Upstream issue,
-  no action here.
