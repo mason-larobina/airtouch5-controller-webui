@@ -376,6 +376,7 @@ h1 {
 .bulk-bar .bulk-mode {
   width: 128px;
   flex: none;
+  margin-left: auto;
 }
 .bulk-bar .power-group {
   display: flex;
@@ -400,15 +401,6 @@ h1 {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-left: auto;
-}
-.bulk-bar .btn.preset {
-  min-height: 36px;
-  padding: 6px 12px;
-  font-size: 13px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 /* Zone rows are laid out as a 6-column grid: zone name (fills remaining
    width, ellipsises on overflow), current temp, temp/% control, [ - ],
