@@ -90,11 +90,5 @@
       </div>
     </div>
   </div>
-
-  <!-- Timer (status only; the crate exposes no timer-control API) -->
-  <div class="field">
-    <div class="label">Timer</div>
-    <span class="timer-status{% if ac.timer_text() == "timer off" %} off{% endif %}">{{ ac.timer_text() }}</span>
-  </div>
   {% endif %}
 </div>

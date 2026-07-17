@@ -589,19 +589,6 @@ impl AcView {
         }
     }
 
-    /// Timer status text derived from the AcFlags::Timer flag.
-    pub fn timer_text(&self) -> &'static str {
-        if self
-            .status
-            .as_ref()
-            .map(|s| s.flags.iter().any(|f| *f == "Timer"))
-            .unwrap_or(false)
-        {
-            "timer running"
-        } else {
-            "timer off"
-        }
-    }
 }
 
 impl AcStatusView {
