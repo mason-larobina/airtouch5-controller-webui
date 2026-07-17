@@ -65,11 +65,11 @@ device on the same network).
 
 #### Command-line options and environment variables
 
-| Option                       | Env var                            | Default       | Meaning                                              |
-| ---------------------------- | ---------------------------------- | ------------- | ---------------------------------------------------- |
-| `--bind <addr:port>`         | `AIRCON_LISTEN`                    | `0.0.0.0:3000`| Address and port the HTTP server listens on.         |
-| `--discovery-timeout-ms <ms>`| `AIRCON_DISCOVERY_TIMEOUT_MS`      | `3000`        | How long UDP discovery waits for a console response.  |
-| `--timeout <seconds>`        | (none)                             | off           | Shut down after N seconds (mainly for tests).         |
+| Option                        | Env var                       | Default        | Meaning                                              |
+| ----------------------------- | ----------------------------- | -------------- | ---------------------------------------------------- |
+| `--bind <addr:port>`          | `AIRCON_LISTEN`               | `0.0.0.0:3000` | Address and port the HTTP server listens on.         |
+| `--discovery-timeout-ms <ms>` | `AIRCON_DISCOVERY_TIMEOUT_MS` | `3000`         | How long UDP discovery waits for a console response. |
+| `--timeout <seconds>`         | (none)                        | off            | Shut down after N seconds (mainly for tests).        |
 
 Logging is environment-driven. Set the tracing filter with `AIRCON_LOG` or
 `RUST_LOG`; the default is `aircon=info,tower_http=info`. Control actions (every

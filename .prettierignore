@@ -1,0 +1,8 @@
+# Build artifacts
+/target
+
+# Vendored third-party assets (do not reformat)
+static/vendor
+
+# Version control
+.git

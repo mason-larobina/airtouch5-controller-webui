@@ -129,9 +129,9 @@ handle. `manager_loop` runs forever:
    - `status_rx.changed()` -- rebuild + publish a new `Snapshot`;
    - `cmd_rx.recv()` -- apply the command (with a `COMMAND_TIMEOUT`), fold the
      post-change status into the snapshot, reply on the oneshot.
-   Either the status watch closing (connection lost) or a command timing out
-   returns `Err(())`, which triggers a reconnect: publish a disconnected
-   snapshot (last-known state preserved, `connected = false`), back off, loop.
+     Either the status watch closing (connection lost) or a command timing out
+     returns `Err(())`, which triggers a reconnect: publish a disconnected
+     snapshot (last-known state preserved, `connected = false`), back off, loop.
 
 On disconnect the last-known `Snapshot` is preserved so the UI keeps showing
 cards under a "disconnected" banner; SSE clients receive a `state` event.
@@ -246,21 +246,21 @@ For the AC setpoint stepper, `build_ac_status_view` pre-computes
 
 ### 4.3 Crate -> view mapping
 
-| crate type (`types::status`)                              | view field                              | notes                                                                                  |
-| -------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------- |
-| `AcStatus.power: Option<AcPower>`                        | `AcStatusView.power`                    | `On/Off/AwayOff/AwayOn/Sleep`                                                          |
-| `AcStatus.mode: Option<AcMode>`                          | `.mode`                                 | `Auto/Heat/Dry/Fan/Cool/AutoHeat/AutoCool` (the three Auto variants all select Auto)   |
-| `AcStatus.fan_speed: Option<(FanSpeed,bool)>`            | `.fan_speed` + `.fan_intelligent_auto` | the bool is the IntelligentAuto modifier, surfaced as its own toggle                    |
-| `AcStatus.setpoint/temperature: Option<Temperature>`     | kept as `Temperature`                  | render via `Display`                                                                   |
-| `AcFlags` (bitflags)                                     | `.flags: Vec<&str>`                     | `iter_names()`                                                                          |
-| `ZoneStatus.power: ZonePower`                             | `ZoneView.power`                        | `Off/On/Turbo` (status enum)                                                            |
-| `ZoneStatus.control: ZoneControl`                         | `.control_mode` + `.airflow_pct` + `.setpoint` | `Airflow(pct)` -> Airflow; `Temperature(pct,temp)` -> Temperature, setpoint=Some(temp) |
-| `ZoneStatus.sensor_reading: ZoneSensorReading`           | `.has_sensor` + `.sensor`              | `NoSensor`->false/None; `NotAvailable`->true/Some(NA); `Temperature(t)`->true/Some(t)  |
-| `ZoneFlags` (bitflags)                                   | `.flags`                                | `LowBattery/Spill`                                                                      |
+| crate type (`types::status`)                         | view field                                     | notes                                                                                  |
+| ---------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `AcStatus.power: Option<AcPower>`                    | `AcStatusView.power`                           | `On/Off/AwayOff/AwayOn/Sleep`                                                          |
+| `AcStatus.mode: Option<AcMode>`                      | `.mode`                                        | `Auto/Heat/Dry/Fan/Cool/AutoHeat/AutoCool` (the three Auto variants all select Auto)   |
+| `AcStatus.fan_speed: Option<(FanSpeed,bool)>`        | `.fan_speed` + `.fan_intelligent_auto`         | the bool is the IntelligentAuto modifier, surfaced as its own toggle                   |
+| `AcStatus.setpoint/temperature: Option<Temperature>` | kept as `Temperature`                          | render via `Display`                                                                   |
+| `AcFlags` (bitflags)                                 | `.flags: Vec<&str>`                            | `iter_names()`                                                                         |
+| `ZoneStatus.power: ZonePower`                        | `ZoneView.power`                               | `Off/On/Turbo` (status enum)                                                           |
+| `ZoneStatus.control: ZoneControl`                    | `.control_mode` + `.airflow_pct` + `.setpoint` | `Airflow(pct)` -> Airflow; `Temperature(pct,temp)` -> Temperature, setpoint=Some(temp) |
+| `ZoneStatus.sensor_reading: ZoneSensorReading`       | `.has_sensor` + `.sensor`                      | `NoSensor`->false/None; `NotAvailable`->true/Some(NA); `Temperature(t)`->true/Some(t)  |
+| `ZoneFlags` (bitflags)                               | `.flags`                                       | `LowBattery/Spill`                                                                     |
 
 > **Two different enums share names.** `types::status::ZonePower`
-> (`Off/On/Turbo`) is *what the zone is doing now*;
-> `types::control::ZonePower` (`Toggle/Off/On/Turbo`) is a *command*. They are
+> (`Off/On/Turbo`) is _what the zone is doing now_;
+> `types::control::ZonePower` (`Toggle/Off/On/Turbo`) is a _command_. They are
 > distinct types despite the shared name -- same for `AcPower`/`AcMode`/
 > `FanSpeed`. The mapping functions must use the correct module for each
 > direction. `ZoneControlReq`/`AcControlReq` in `command.rs` are the bridge:
@@ -321,15 +321,15 @@ over a single SSE stream.
 
 ### 6.1 Pages and partials
 
-| Method | Path                    | Handler                  | Returns                            |
-| ------ | ----------------------- | ------------------------ | ---------------------------------- |
-| GET    | `/`                     | `pages::index`           | `index.html` shell                 |
-| GET    | `/partials/system`      | `pages::partial_system`  | `#system`                           |
-| GET    | `/partials/acs`         | `pages::partial_acs`     | `#acs` (all AC cards)               |
-| GET    | `/partials/acs/{id}`    | `pages::partial_ac`      | `#ac-<id>`                          |
-| GET    | `/partials/zones`       | `pages::partial_zones`   | `#zones` (bulk bar + all rows)      |
-| GET    | `/partials/zones/{id}`  | `pages::partial_zone`    | `#zone-<id>`                        |
-| POST   | `/refresh`              | `pages::refresh`         | re-pull status, re-render `#system`  |
+| Method | Path                   | Handler                 | Returns                             |
+| ------ | ---------------------- | ----------------------- | ----------------------------------- |
+| GET    | `/`                    | `pages::index`          | `index.html` shell                  |
+| GET    | `/partials/system`     | `pages::partial_system` | `#system`                           |
+| GET    | `/partials/acs`        | `pages::partial_acs`    | `#acs` (all AC cards)               |
+| GET    | `/partials/acs/{id}`   | `pages::partial_ac`     | `#ac-<id>`                          |
+| GET    | `/partials/zones`      | `pages::partial_zones`  | `#zones` (bulk bar + all rows)      |
+| GET    | `/partials/zones/{id}` | `pages::partial_zone`   | `#zone-<id>`                        |
+| POST   | `/refresh`             | `pages::refresh`        | re-pull status, re-render `#system` |
 
 ### 6.2 SSE
 
@@ -342,15 +342,15 @@ every `ac-<id>`, every `zone-<id>` fragment) so a fresh browser populates
 everything, then **per-change diffs** thereafter. Each event's `data:` is the
 matching HTML fragment with a stable element `id`:
 
-| event         | `data:`                               | browser target   |
-| ------------- | ------------------------------------- | ---------------- |
-| `state`       | `<div id="connection-state">...`      | swap `#connection-state` |
-| `system`      | `<div id="system">...`                | swap `#system`            |
-| `ac-<id>`     | `<div id="ac-<id>" ...>...`           | swap `#ac-<id>`           |
-| `zone-<id>`   | `<div id="zone-<id>" ...>...`          | swap `#zone-<id>`         |
+| event       | `data:`                          | browser target           |
+| ----------- | -------------------------------- | ------------------------ |
+| `state`     | `<div id="connection-state">...` | swap `#connection-state` |
+| `system`    | `<div id="system">...`           | swap `#system`           |
+| `ac-<id>`   | `<div id="ac-<id>" ...>...`      | swap `#ac-<id>`          |
+| `zone-<id>` | `<div id="zone-<id>" ...>...`    | swap `#zone-<id>`        |
 
 **Per-id event names are deliberate.** The htmx-sse extension swaps an event's
-data into *every* element listening for that event name, so a generic `zone`
+data into _every_ element listening for that event name, so a generic `zone`
 event would swap the same fragment into every card. Per-id names (`zone-3`,
 `zone-7`) isolate each card to its own event. Each fragment element carries
 its own `sse-swap="zone-<id>"` (or `ac-<id>`, `system`, `state`) plus
@@ -375,20 +375,20 @@ Client wiring (in `index.html`):
 
 ### 6.3 Zone control endpoints
 
-| Method | Path                      | Form field(s)                          | Action                                                        |
-| ------ | ------------------------- | -------------------------------------- | ------------------------------------------------------------- |
-| POST   | `/zone/{id}/power`        | `power=on\|off\|turbo\|toggle`         | `ZonePower`                                                   |
-| POST   | `/zone/{id}/control-type` | `type=airflow\|temperature`            | `ZoneControlType` (temp rejected if `!has_sensor`)            |
-| POST   | `/zone/{id}/step`         | `dir=up\|down`                         | `Increment` / `Decrement` (+5% airflow or +1.0 C setpoint)    |
-| POST   | `/zone/{id}/airflow`      | `pct=0..100`                           | `SetAirflow(pct)`                                              |
-| POST   | `/zone/{id}/setpoint`     | `temp=10.0..25.0`                      | `SetTemperature(t)` (also forces Temperature mode)             |
+| Method | Path                      | Form field(s)                  | Action                                                     |
+| ------ | ------------------------- | ------------------------------ | ---------------------------------------------------------- |
+| POST   | `/zone/{id}/power`        | `power=on\|off\|turbo\|toggle` | `ZonePower`                                                |
+| POST   | `/zone/{id}/control-type` | `type=airflow\|temperature`    | `ZoneControlType` (temp rejected if `!has_sensor`)         |
+| POST   | `/zone/{id}/step`         | `dir=up\|down`                 | `Increment` / `Decrement` (+5% airflow or +1.0 C setpoint) |
+| POST   | `/zone/{id}/airflow`      | `pct=0..100`                   | `SetAirflow(pct)`                                          |
+| POST   | `/zone/{id}/setpoint`     | `temp=10.0..25.0`              | `SetTemperature(t)` (also forces Temperature mode)         |
 
 Bulk endpoints apply to every zone and re-render the whole `#zones` partial:
 
-| Method | Path                   | Form field(s)                                  | Action                                                              |
-| ------ | ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
-| POST   | `/zones/control-type`  | `type=airflow\|temperature`                    | switch every zone (temp skips sensorless zones)                     |
-| POST   | `/zones/preset`        | `mode=airflow\|temperature` + `value=...`      | set every zone to a preset (% to all, temp to sensor zones only)     |
+| Method | Path                  | Form field(s)                             | Action                                                           |
+| ------ | --------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
+| POST   | `/zones/control-type` | `type=airflow\|temperature`               | switch every zone (temp skips sensorless zones)                  |
+| POST   | `/zones/preset`       | `mode=airflow\|temperature` + `value=...` | set every zone to a preset (% to all, temp to sensor zones only) |
 
 Each single-zone POST sends the command, awaits the reply, and returns the
 updated `zone.html` fragment for that id; the browser swaps it into
@@ -398,12 +398,12 @@ reflects the user's last selection rather than only the live zone states.
 
 ### 6.4 AC control endpoints
 
-| Method | Path                 | Form field(s)                                          | Action                                          |
-| ------ | -------------------- | ------------------------------------------------------ | ----------------------------------------------- |
-| POST   | `/ac/{id}/power`      | `power=on\|off\|away\|sleep\|toggle`                   | `AcPower`                                        |
-| POST   | `/ac/{id}/mode`       | `mode=auto\|heat\|dry\|fan\|cool`                     | `AcMode`                                         |
-| POST   | `/ac/{id}/fan`        | `fan=auto\|quiet\|low\|medium\|high\|powerful\|turbo\|intelligentauto` | `FanSpeed`             |
-| POST   | `/ac/{id}/setpoint`   | `temp=<float>`                                         | `Setpoint` (validated against the protocol range) |
+| Method | Path                | Form field(s)                                                          | Action                                            |
+| ------ | ------------------- | ---------------------------------------------------------------------- | ------------------------------------------------- |
+| POST   | `/ac/{id}/power`    | `power=on\|off\|away\|sleep\|toggle`                                   | `AcPower`                                         |
+| POST   | `/ac/{id}/mode`     | `mode=auto\|heat\|dry\|fan\|cool`                                      | `AcMode`                                          |
+| POST   | `/ac/{id}/fan`      | `fan=auto\|quiet\|low\|medium\|high\|powerful\|turbo\|intelligentauto` | `FanSpeed`                                        |
+| POST   | `/ac/{id}/setpoint` | `temp=<float>`                                                         | `Setpoint` (validated against the protocol range) |
 
 **AC-on guard.** Starting an AC (explicit `on`, or a `toggle` that resolves to
 on) is rejected with a 422 while every one of its zones is off: the console
@@ -422,12 +422,13 @@ manager/console failures.
 ## 7. The mock controller
 
 `mock.rs` implements the exact same `ManagerHandle` contract (a `watch::Sender`
-+ `mpsc::Receiver<Command>`) without any `AirTouch5` handle or wire protocol.
-It owns a `Snapshot`, applies commands by mutating it (mirroring the console's
-semantics: 5% / 1.0 C steps, clamped setpoints, sensorless rejection,
-IntelligentAuto flag, the AC-on guard lives in the handler), and re-publishes.
-Because the router/handlers/templates/SSE code is unchanged, the mock drives
-the real UI path end to end.
+
+- `mpsc::Receiver<Command>`) without any `AirTouch5` handle or wire protocol.
+  It owns a `Snapshot`, applies commands by mutating it (mirroring the console's
+  semantics: 5% / 1.0 C steps, clamped setpoints, sensorless rejection,
+  IntelligentAuto flag, the AC-on guard lives in the handler), and re-publishes.
+  Because the router/handlers/templates/SSE code is unchanged, the mock drives
+  the real UI path end to end.
 
 `spawn_mock_controller(initial)` returns `(ManagerHandle, MockController)`. The
 `MockController` lets tests inject arbitrary live changes (as if someone
