@@ -9,13 +9,6 @@
               hx-post="/zones/power" hx-vals='{"power":"off"}'
               hx-target="#zones" hx-swap="outerHTML">OFF</button>
     </div>
-    <div class="mode-toggle bulk-mode" role="group" aria-label="all zones preset mode">
-      <button type="button" data-mode="airflow"
-              {% if bulk_mode.is_airflow() %} class="active" aria-pressed="true"{% endif %}>%</button>
-      <button type="button" data-mode="temperature"
-              {% if bulk_mode.is_temperature() %} class="active" aria-pressed="true"{% endif %}
-              {% if !snapshot.bulk_temp_available() %} disabled{% endif %}>°C</button>
-    </div>
     <div class="bulk-presets">
       <div class="preset-row preset-airflow">
         <button class="btn preset" type="button"
@@ -47,6 +40,13 @@
                 hx-target="#zones" hx-swap="outerHTML">23</button>
       </div>
       {% endif %}
+    </div>
+    <div class="mode-toggle bulk-mode" role="group" aria-label="all zones preset mode">
+      <button type="button" data-mode="airflow"
+              {% if bulk_mode.is_airflow() %} class="active" aria-pressed="true"{% endif %}>%</button>
+      <button type="button" data-mode="temperature"
+              {% if bulk_mode.is_temperature() %} class="active" aria-pressed="true"{% endif %}
+              {% if !snapshot.bulk_temp_available() %} disabled{% endif %}>°C</button>
     </div>
   </div>
   {% for zone in snapshot.zones.values() %}

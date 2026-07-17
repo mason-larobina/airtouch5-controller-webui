@@ -46,6 +46,7 @@ pub fn build_router(manager: ManagerHandle) -> Router {
         // Zone controls
         .route("/zone/{id}/power", post(handlers::zone::power))
         .route("/zone/{id}/control-type", post(handlers::zone::control_type))
+        .route("/zone/{id}/control-type/toggle", post(handlers::zone::toggle_control_type))
         .route("/zone/{id}/step", post(handlers::zone::step))
         .route("/zone/{id}/airflow", post(handlers::zone::airflow))
         .route("/zone/{id}/setpoint", post(handlers::zone::setpoint))

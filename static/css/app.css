@@ -375,6 +375,11 @@ h1 {
 }
 .bulk-bar .bulk-mode {
   flex: none;
+}
+/* The presets sit to the left of the % / Temp toggle and absorb the
+   free space, so the toggle stays pinned to the right edge and does
+   not shift when the preset row swaps width (airflow vs temperature). */
+.bulk-bar .bulk-presets {
   margin-left: auto;
 }
 .bulk-bar .power-group {
@@ -396,18 +401,15 @@ h1 {
   gap: 6px;
   flex-wrap: wrap;
 }
-.bulk-bar .bulk-presets {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-/* Zone rows are laid out as a 6-column grid: zone name (fills remaining
-   width, ellipsises on overflow), current temp, temp/% control, [ - ],
-   setpoint value, [ + ]. Every column except the name has a fixed width so
-   all rows line up like a table. */
+/* Zone rows are laid out as a 5-column grid: zone name (fills remaining
+   width, ellipsises on overflow), current temp, [ - ], setpoint value, [ + ].
+   Every column except the name has a fixed width so all rows line up like a
+   table. The setpoint value is itself a button -- tapping it toggles the
+   zone between % (airflow) and C (temperature) control, so no separate
+   % / C toggle column is needed. */
 .zone-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px 112px var(--btn-step-w) 64px var(
+  grid-template-columns: minmax(0, 1fr) 88px var(--btn-step-w) 88px var(
       --btn-step-w
     );
   align-items: center;
@@ -419,17 +421,17 @@ h1 {
   border-bottom: 0;
 }
 /* An off zone is signalled by its hollow power toggle and a muted name.
-   The controls (mode toggle, setpoint stepper) are NOT dimmed so they
-   stay clearly tappable while the zone is off -- tmp/% selection and
+   The controls (setpoint value / %-C toggle, stepper) are NOT dimmed so
+   they stay clearly tappable while the zone is off -- mode switching and
    setpoint adjustment remain possible when the zone (or the system) is
    off. */
 .zone-row.off .name {
   color: var(--muted);
 }
-/* The control cluster (temp/%, -, setpoint, +) sits in one wrapper that
+/* The control cluster (-, setpoint value, +) sits in one wrapper that
    flattens into the row grid on desktop (display: contents) so each piece
    becomes its own aligned column, then collapses back to a flex row on
-   narrow screens. */
+   narrow screens. The setpoint value doubles as the % / C mode toggle. */
 .zone-controls {
   display: contents;
 }
@@ -537,15 +539,29 @@ h1 {
   justify-content: center;
 }
 .zone-controls .val {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 7px;
   font-family: var(--mono);
   font-size: 16px;
   font-weight: 600;
   text-align: center;
   color: var(--accent);
   flex: none;
+  min-height: var(--btn-h);
+  padding: 10px 12px;
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.zone-controls .val:hover:not(:disabled) {
+  border-color: var(--accent-dim);
+  background: var(--panel-2);
+}
+.zone-controls .val:disabled {
+  cursor: default;
 }
 .zone-flags {
   display: inline-flex;

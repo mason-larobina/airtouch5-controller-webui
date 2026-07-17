@@ -214,36 +214,38 @@ async fn zone_control_type_to_temperature_switches_mode() {
             .await
             .unwrap();
 
-        // The temperature (C) button in the mode-toggle must be the active one.
-        let temp_btn = body
-            .split_once("{\"type\":\"temperature\"}")
-            .expect("temperature control-type button missing")
+        // The % / C mode-toggle column is gone: the setpoint value is now a
+        // single tappable button that doubles as the mode switch. After the
+        // switch it must show a temperature setpoint (kitchen has no prior
+        // setpoint, so the handler falls back to 20.0 C), not a %.
+        let val_btn = body
+            .split_once("class=\"val\"")
+            .expect("val button missing")
             .1
-            .split_once(">\u{b0}C</button>")
-            .expect("temp button closing tag missing")
+            .split_once("</button>")
+            .expect("val button closing tag missing")
             .0;
+        // The button's inner text is everything after the opening tag's `>`;
+        // the attributes (e.g. the title) may contain a stray %.
+        let inner = val_btn
+            .split_once('>')
+            .expect("val button opening tag missing")
+            .1
+            .trim();
         assert!(
-            temp_btn.contains("class=\"active\""),
-            "temp (C) button must be active after switching to temperature, got: {body}"
+            inner.contains(" C"),
+            "val must show a temperature setpoint after the switch, got: {body}"
+        );
+        assert!(
+            !inner.contains('%'),
+            "val must not show a % airflow value after switching to temperature, got: {body}"
         );
 
-        // The airflow (%) button must NOT be active anymore.
-        let airflow_btn = body
-            .split_once("{\"type\":\"airflow\"}")
-            .expect("airflow control-type button missing")
-            .1
-            .split_once("% </button>")
-            .expect("airflow button closing tag missing")
-            .0;
+        // Tapping the value must toggle back to % control via the toggle
+        // endpoint (it is only wired up for zones with a sensor).
         assert!(
-            !airflow_btn.contains("class=\"active\""),
-            "airflow (%) button must be inactive after switching to temperature, got: {body}"
-        );
-
-        // The stepper value must now read a temperature setpoint, not a %.
-        assert!(
-            body.contains(" C</span>"),
-            "stepper must show a temperature setpoint after the switch, got: {body}"
+            body.contains("/zone/2/control-type/toggle"),
+            "val button must POST the toggle endpoint, got: {body}"
         );
     })
     .await;
@@ -271,6 +273,63 @@ async fn zone_setpoint_requires_sensor() {
 }
 
 #[tokio::test]
+async fn zone_control_type_toggle_round_trips() {
+    capped(async {
+        let addr = spawn_server().await.0;
+        // Kitchen (zone 2) has a sensor and starts in airflow (%) mode. The
+        // toggle endpoint switches to the opposite mode; toggling again
+        // returns it to airflow. Each response re-renders the zone row, so
+        // the val button reflects the new mode (C vs %).
+        let to_temp = client()
+            .post(format!("http://{addr}/zone/2/control-type/toggle"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(to_temp.status(), reqwest::StatusCode::OK);
+        let body = to_temp.text().await.unwrap();
+        let inner = body
+            .split_once("class=\"val\"")
+            .expect("val button missing")
+            .1
+            .split_once("</button>")
+            .expect("val button closing tag missing")
+            .0
+            .split_once('>')
+            .expect("val button opening tag missing")
+            .1
+            .trim();
+        assert!(
+            inner.contains(" C"),
+            "first toggle (airflow -> temp) must show a setpoint, got: {body}"
+        );
+
+        let to_air = client()
+            .post(format!("http://{addr}/zone/2/control-type/toggle"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(to_air.status(), reqwest::StatusCode::OK);
+        let body = to_air.text().await.unwrap();
+        let inner = body
+            .split_once("class=\"val\"")
+            .expect("val button missing")
+            .1
+            .split_once("</button>")
+            .expect("val button closing tag missing")
+            .0
+            .split_once('>')
+            .expect("val button opening tag missing")
+            .1
+            .trim();
+        assert!(
+            inner.contains('%'),
+            "second toggle (temp -> airflow) must show a %, got: {body}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn zone_airflow_toggle_enabled_without_sensor() {
     capped(async {
         let (addr, _m) = spawn_server().await;
@@ -287,31 +346,24 @@ async fn zone_airflow_toggle_enabled_without_sensor() {
             .await
             .unwrap();
 
-        // The airflow button tag spans from its opening `<button` to `% </button>`;
-        // it must not carry a `disabled` attribute.
-        let airflow_btn = body
-            .split_once("{\"type\":\"airflow\"}")
-            .expect("airflow control-type button missing")
+        // With the % / C mode-toggle gone, the setpoint value button is the
+        // sole mode switch. For a sensorless zone it is locked in airflow
+        // (%) mode: the button must be `disabled` (no toggle available) and
+        // must not carry a toggle hx-post.
+        let val_btn = body
+            .split_once("class=\"val\"")
+            .expect("val button missing")
             .1
-            .split_once("% </button>")
-            .expect("airflow button closing tag missing")
+            .split_once("</button>")
+            .expect("val button closing tag missing")
             .0;
         assert!(
-            !airflow_btn.contains("disabled"),
-            "airflow (%) button must stay enabled when off/sensorless, got: {body}"
+            val_btn.contains("disabled"),
+            "val button must be disabled without a sensor, got: {body}"
         );
-
-        // The temperature button, by contrast, must remain disabled.
-        let temp_btn = body
-            .split_once("{\"type\":\"temperature\"}")
-            .expect("temperature control-type button missing")
-            .1
-            .split_once(">\u{b0}C</button>")
-            .expect("temp button closing tag missing")
-            .0;
         assert!(
-            temp_btn.contains("disabled"),
-            "temperature button must be disabled without a sensor, got: {body}"
+            !val_btn.contains("/control-type/toggle"),
+            "sensorless val button must not POST the toggle endpoint, got: {body}"
         );
     })
     .await;

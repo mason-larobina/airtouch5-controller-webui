@@ -28,25 +28,17 @@
   <div class="zone-temp{% if zone.has_sensor %} has-sensor{% endif %}">{{ zone.sensor_display() }}</div>
 
   <div class="zone-controls">
-    <div class="mode-toggle" role="group" aria-label="control mode">
-      <button type="button"
-              hx-post="/zone/{{ zone.id }}/control-type"
-              hx-vals='{"type":"airflow"}'
-              hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML"
-              {% if zone.is_airflow() %} class="active" aria-pressed="true"{% endif %}>% </button>
-      <button type="button"
-              hx-post="/zone/{{ zone.id }}/control-type"
-              hx-vals='{"type":"temperature"}'
-              hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML"
-              {% if zone.is_temp() %} class="active" aria-pressed="true"{% endif %}
-              {% if !zone.has_sensor %} disabled{% endif %}>°C</button>
-    </div>
-
     <button class="btn step" type="button" aria-label="decrement"
             hx-post="/zone/{{ zone.id }}/step"
             hx-vals='{"dir":"down"}'
             hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML">-</button>
-    <span class="val">{{ zone.value_display() }}</span>
+    <button class="val" type="button"
+            title="tap to switch % / C control"
+            {% if !zone.has_sensor %} disabled{% endif %}
+            {% if zone.has_sensor %}
+            hx-post="/zone/{{ zone.id }}/control-type/toggle"
+            hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML"
+            {% endif %}>{{ zone.value_display() }}</button>
     <button class="btn step" type="button" aria-label="increment"
             hx-post="/zone/{{ zone.id }}/step"
             hx-vals='{"dir":"up"}'

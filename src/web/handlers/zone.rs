@@ -73,6 +73,29 @@ pub async fn control_type(
     render_current_zone(&state.manager, id)
 }
 
+/// `POST /zone/:id/control-type/toggle` -- no form fields.
+///
+/// Switches the zone to the opposite control mode: airflow -> temperature or
+/// temperature -> airflow. This is the single tap target for the zone row's
+/// setpoint value button (which doubles as the %/C mode switch). Temperature
+/// is rejected (422) for sensorless zones, so for those the button is rendered
+/// disabled and this handler is never reached in practice.
+pub async fn toggle_control_type(
+    State(state): State<AppState>,
+    Path(id): Path<u8>,
+) -> Result<Html<String>, AppError> {
+    let snap = state.manager.snapshot_rx.borrow().clone();
+    let zone = snap
+        .zones
+        .get(&id)
+        .ok_or_else(|| AppError::msg(format!("zone {id} not found")))?;
+    let t = if zone.is_temp() { "airflow" } else { "temperature" };
+    // Reuse the explicit control-type logic so setpoint fallbacks, sensor
+    // rejection, and the no-power-field behaviour stay in one place.
+    let form = vec![("type".to_string(), t.to_string())];
+    control_type(State(state), Path(id), Form(form)).await
+}
+
 /// `POST /zone/:id/step` -- form field `dir = up | down`.
 ///
 /// The +/- stepper steps the zone's value in its current control mode: +/- 5%
