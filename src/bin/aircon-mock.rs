@@ -38,13 +38,10 @@ struct Cli {
     automation_tick_secs: u64,
 
     /// Path to the automation config file (enable/disable + parameters).
-    /// Created/updated on change; loaded on startup.
-    #[arg(
-        long,
-        env = "AIRCON_AUTOMATION_CONFIG",
-        default_value = "automation.json"
-    )]
-    automation_config: PathBuf,
+    /// Created/updated on change; loaded on startup. When unset, defaults to
+    /// `$XDG_CONFIG_HOME/aircon/automation.json` (~/.config/aircon/...).
+    #[arg(long, env = "AIRCON_AUTOMATION_CONFIG")]
+    automation_config: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -64,10 +61,14 @@ async fn main() {
     // Spawn the mock controller with the sample (mockup-like) state.
     let (manager, _mock) = mock::spawn_mock_controller(mock::sample_snapshot());
 
-    // Load automation config + spawn the engine. The mock defaults to a
-    // writeable file in the cwd (so the mock UI persists toggles just like the
-    // real binary).
-    let automation = AutomationStore::load(cli.automation_config.clone());
+    // Load automation config + spawn the engine. Defaults to the XDG config
+    // path (so the mock UI persists toggles just like the real binary); use
+    // --automation-config to override.
+    let automation = AutomationStore::load(
+        cli.automation_config
+            .or_else(automation::default_config_path)
+            .unwrap_or_else(|| PathBuf::from("automation.json")),
+    );
     if cli.automation_tick_secs > 0 {
         automation::spawn_automation(
             manager.clone(),

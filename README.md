@@ -71,13 +71,13 @@ device on the same network).
 
 #### Command-line options and environment variables
 
-| Option                        | Env var                       | Default           | Meaning                                                                     |
-| ----------------------------- | ----------------------------- | ----------------- | --------------------------------------------------------------------------- |
-| `--bind <addr:port>`          | `AIRCON_LISTEN`               | `0.0.0.0:3000`    | Address and port the HTTP server listens on.                                |
-| `--discovery-timeout-ms <ms>` | `AIRCON_DISCOVERY_TIMEOUT_MS` | `3000`            | How long UDP discovery waits for a console response.                        |
-| `--timeout <seconds>`         | (none)                        | off               | Shut down after N seconds (mainly for tests).                               |
-| `--automation-tick-secs <s>`  | `AIRCON_AUTOMATION_TICK_SECS` | `60`              | How often the automation engine evaluates its programs. `0` disables it.    |
-| `--automation-config <path>`  | `AIRCON_AUTOMATION_CONFIG`    | `automation.json` | File the automation enable/parameter settings are saved to and loaded from. |
+| Option                        | Env var                       | Default        | Meaning                                                                                                                                                                           |
+| ----------------------------- | ----------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--bind <addr:port>`          | `AIRCON_LISTEN`               | `0.0.0.0:3000` | Address and port the HTTP server listens on.                                                                                                                                      |
+| `--discovery-timeout-ms <ms>` | `AIRCON_DISCOVERY_TIMEOUT_MS` | `3000`         | How long UDP discovery waits for a console response.                                                                                                                              |
+| `--timeout <seconds>`         | (none)                        | off            | Shut down after N seconds (mainly for tests).                                                                                                                                     |
+| `--automation-tick-secs <s>`  | `AIRCON_AUTOMATION_TICK_SECS` | `60`           | How often the automation engine evaluates its programs. `0` disables it.                                                                                                          |
+| `--automation-config <path>`  | `AIRCON_AUTOMATION_CONFIG`    | XDG config dir | File the automation enable/parameter settings are saved to and loaded from. Defaults to `$XDG_CONFIG_HOME/aircon/automation.json` (typically `~/.config/aircon/automation.json`). |
 
 Logging is environment-driven. Set the tracing filter with `AIRCON_LOG` or
 `RUST_LOG`; the default is `aircon=info,tower_http=info`. Control actions (every
@@ -156,7 +156,8 @@ left untouched.
   keep the idle timer alive.
 
 Both programs are disabled by default. Enable them and pick presets in the UI;
-settings are saved to the `--automation-config` file (default `automation.json`)
+settings are saved to the `--automation-config` file (defaulting to the XDG
+config dir, e.g. `~/.config/aircon/automation.json`)
 and reloaded on startup. Away/Sleep AC states are never touched -- only ACs
 that are `On` get turned off.
 

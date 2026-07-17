@@ -57,6 +57,14 @@ pub const DEFAULT_SETPOINT_HOLD: Duration = Duration::from_secs(15 * 60);
 /// Default idle auto-off timeout.
 pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
+/// The XDG-based default config path: `$XDG_CONFIG_HOME/aircon/automation.json`
+/// (falling back to `~/.config/aircon/automation.json` when `XDG_CONFIG_HOME`
+/// is unset). Returns `None` only if no home directory can be determined.
+/// Overridden by the `--automation-config` flag in both binaries.
+pub fn default_config_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|d| d.join("aircon").join("automation.json"))
+}
+
 /// Configuration for the two automation programs. Persisted as JSON when the
 /// store has a path (see [`AutomationStore::load`]).
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -139,7 +147,11 @@ impl AutomationStore {
             .ok()
             .and_then(|b| serde_json::from_slice::<AutomationConfig>(&b).ok())
             .unwrap_or_default();
-        tracing::info!("automation config loaded from {}", path.display());
+        if path.parent().is_some() {
+            tracing::info!("automation config path: {}", path.display());
+        } else {
+            tracing::info!("automation config path: {}", path.display());
+        }
         Self {
             config: Arc::new(RwLock::new(config)),
             path: Some(path),
@@ -203,6 +215,13 @@ impl AutomationStore {
         let Some(path) = &self.path else {
             return Ok(());
         };
+        // Ensure the parent directory exists (the XDG default lives under
+        // `~/.config/aircon`, which may not exist on a fresh install).
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+        }
         let bytes = serde_json::to_vec_pretty(cfg).map_err(|e| e.to_string())?;
         // Atomic-ish: write to a sibling temp file then rename over the target.
         let tmp_name = path

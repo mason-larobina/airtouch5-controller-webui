@@ -36,14 +36,10 @@ struct Cli {
     automation_tick_secs: u64,
 
     /// Path to the automation config file (enable/disable + parameters).
-    /// Created/updated on change; loaded on startup. Defaults to
-    /// `automation.json` in the current directory.
-    #[arg(
-        long,
-        env = "AIRCON_AUTOMATION_CONFIG",
-        default_value = "automation.json"
-    )]
-    automation_config: PathBuf,
+    /// Created/updated on change; loaded on startup. When unset, defaults to
+    /// `$XDG_CONFIG_HOME/aircon/automation.json` (~/.config/aircon/...).
+    #[arg(long, env = "AIRCON_AUTOMATION_CONFIG")]
+    automation_config: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -67,9 +63,14 @@ async fn main() {
     // Spawn the connection manager (discovers + connects in the background).
     let manager = spawn_manager((*config).clone()).await;
 
-    // Load the shared automation config (persisted to disk) and spawn the
-    // background engine that evaluates the enabled programs on a tick.
-    let automation = AutomationStore::load(cli.automation_config.clone());
+    // Load the shared automation config (persisted to an XDG path by default,
+    // or the --automation-config flag override) and spawn the background engine
+    // that evaluates the enabled programs on a tick.
+    let automation = AutomationStore::load(
+        cli.automation_config
+            .or_else(automation::default_config_path)
+            .unwrap_or_else(|| PathBuf::from("automation.json")),
+    );
     if cli.automation_tick_secs > 0 {
         automation::spawn_automation(
             manager.clone(),

@@ -550,8 +550,11 @@ holds a `ManagerHandle`, watches the live snapshot, and fires by sending
 optional `PathBuf`) is the single source of truth for the enable flags and
 parameters. The engine reads it each tick; the web handlers mutate it via
 typed setters (`set_setpoint_off_enabled`, `set_setpoint_off_hold`, ...) that
-persist to the configured JSON file atomically (write-to-tmp + rename). On
-startup `AutomationStore::load(path)` reads the file back; tests use
+persist to the configured JSON file atomically (write-to-tmp + rename), and
+the parent directory is created on first write. On
+startup `AutomationStore::load(path)` reads the file back; the path is the
+`--automation-config` flag value, or the XDG default
+(`$XDG_CONFIG_HOME/aircon/automation.json`) when the flag is unset. tests use
 `AutomationStore::new(config)` for an in-memory, non-persisting store. Defaults:
 both programs disabled, 15-minute setpoint hold, 30-minute idle timeout.
 
