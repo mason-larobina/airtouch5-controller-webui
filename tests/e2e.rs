@@ -1334,16 +1334,17 @@ async fn index_renders_automation_section() {
             "setpoint program missing"
         );
         assert!(body.contains("Idle auto-off"), "idle program missing");
-        // Both programs default to disabled: the Off button is the active one.
+        // Both programs default to disabled: the toggle reads "Disabled" with the
+        // off styling.
         let setpoint = program_card(&body, "setpoint-off");
         assert!(
-            setpoint.contains("btn off active"),
-            "setpoint program should default to Off: {setpoint}"
+            setpoint.contains("program-toggle off") && setpoint.contains("Disabled"),
+            "setpoint program should default to Disabled: {setpoint}"
         );
         let idle = program_card(&body, "idle-off");
         assert!(
-            idle.contains("btn off active"),
-            "idle program should default to Off: {idle}"
+            idle.contains("program-toggle off") && idle.contains("Disabled"),
+            "idle program should default to Disabled: {idle}"
         );
     })
     .await;
@@ -1382,10 +1383,10 @@ async fn toggle_setpoint_off_enables_and_reflects() {
             .await
             .unwrap();
         let setpoint = program_card(&body, "setpoint-off");
-        // The On button should now be the active one.
+        // The toggle should now read "Enabled" with the on (green) styling.
         assert!(
-            setpoint.contains("btn on active"),
-            "On should be active after enabling: {setpoint}"
+            setpoint.contains("program-toggle on") && setpoint.contains("Enabled"),
+            "toggle should read Enabled after enabling: {setpoint}"
         );
         // The hold presets should now be enabled (not disabled).
         assert!(
@@ -1474,7 +1475,10 @@ async fn toggle_idle_off_then_disable_resets_active() {
             .text()
             .await
             .unwrap();
-        assert!(program_card(&body, "idle-off").contains("btn on active"));
+        assert!(
+            program_card(&body, "idle-off").contains("program-toggle on")
+                && program_card(&body, "idle-off").contains("Enabled")
+        );
         // Disable again.
         let body = client()
             .post(format!("http://{addr}/automation/idle-off/toggle"))
@@ -1486,8 +1490,9 @@ async fn toggle_idle_off_then_disable_resets_active() {
             .await
             .unwrap();
         assert!(
-            program_card(&body, "idle-off").contains("btn off active"),
-            "idle should be Off after disabling"
+            program_card(&body, "idle-off").contains("program-toggle off")
+                && program_card(&body, "idle-off").contains("Disabled"),
+            "idle should be Disabled after disabling"
         );
     })
     .await;

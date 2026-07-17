@@ -664,26 +664,38 @@ footer a:hover {
   color: var(--muted);
   line-height: 1.45;
 }
+/* Single Enabled/Disabled toggle button. Green when the program is on,
+   muted when it is off; clicking it flips the state. */
 .program-toggle {
-  display: flex;
-  gap: 6px;
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: var(--btn-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
 }
-.program-toggle .btn {
-  min-width: 48px;
-  text-align: center;
+.program-toggle.on {
+  background: var(--good);
+  border-color: var(--good);
+  color: #07140d;
 }
-/* The On button reads as "active/good" when enabled, the Off button when
-   disabled, mirroring the AC power On/Off pair. */
-.program-toggle .btn.on.active {
-  background: var(--accent-dim);
-  border-color: var(--accent);
-  color: var(--text);
+.program-toggle.on:hover {
+  filter: brightness(1.05);
 }
-.program-toggle .btn.off.active {
+.program-toggle.off {
   background: var(--panel-3);
   border-color: var(--border);
   color: var(--muted);
+}
+.program-toggle.off:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 .program-param {
   display: flex;
