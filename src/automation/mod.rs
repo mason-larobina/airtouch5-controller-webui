@@ -201,6 +201,23 @@ impl AutomationStore {
         setpoint_off_status(snap, &self.get(), self.setpoint_since())
     }
 
+    /// Start the setpoint-off countdown if the condition currently holds but
+    /// the countdown has not been started yet (e.g. the engine has not ticked,
+    /// as in the test harness or right after a fresh server start). Idempotent:
+    /// it only writes when the countdown is None. Mirrors the engine so the UI
+    /// shows the "powering off at HH:MM" target as soon as the condition is
+    /// met, not on the next engine tick.
+    pub fn ensure_setpoint_countdown(&self, snap: &Snapshot) {
+        let cfg = self.get();
+        if cfg.setpoint_off_enabled
+            && any_ac_on(snap)
+            && setpoint_condition(snap)
+            && self.setpoint_since().is_none()
+        {
+            self.set_setpoint_since(Some(Instant::now()));
+        }
+    }
+
     /// The instant of the last control-relevant change, if the idle auto-off
     /// countdown is running (None when the program is disabled or has not yet
     /// started). Written by the engine and the enable handler; read by the
@@ -506,9 +523,12 @@ pub struct SetpointOffStatus {
     pub satisfied: usize,
     /// Total number of on-zones.
     pub on_zones: usize,
-    /// Remaining hold time, in whole minutes rounded up. `0` means the hold
-    /// has elapsed and the engine will fire on its next tick ("<1 min").
-    pub remaining_min: u64,
+    /// The wall-clock shutoff time as "HH:MM" (24-hour, local) while the hold
+    /// countdown is running (at setpoint + countdown started, hold not yet
+    /// elapsed); None otherwise. Fixed at `since + hold` so it does not tick
+    /// as time passes -- the card only re-renders when the target actually
+    /// shifts (on a new control change or when the condition flips).
+    pub target_time: Option<String>,
 }
 
 /// Compute the setpoint auto-off status for the UI from the live snapshot,
@@ -521,19 +541,28 @@ pub fn setpoint_off_status(
 ) -> SetpointOffStatus {
     let (at_setpoint, satisfied, on_zones) = setpoint_detail(snap);
     let ac_on = any_ac_on(snap);
-    let hold_secs = cfg.setpoint_off_hold.as_secs();
-    let remaining_secs = match (at_setpoint, since) {
-        (true, Some(start)) => hold_secs.saturating_sub(start.elapsed().as_secs()),
-        _ => hold_secs,
+    let target_time = if cfg.setpoint_off_enabled && ac_on && at_setpoint {
+        since.and_then(|start| {
+            let deadline = start + cfg.setpoint_off_hold;
+            // Once the hold has elapsed the engine fires on its next tick;
+            // show no time then (a past clock time would look broken). The
+            // card falls back to a stable "powering system off" line.
+            if deadline <= Instant::now() {
+                None
+            } else {
+                instant_to_local(deadline).map(|dt| dt.format("%H:%M").to_string())
+            }
+        })
+    } else {
+        None
     };
-    let remaining_min = remaining_secs.div_ceil(60);
     SetpointOffStatus {
         enabled: cfg.setpoint_off_enabled,
         ac_on,
         at_setpoint,
         satisfied,
         on_zones,
-        remaining_min,
+        target_time,
     }
 }
 
@@ -970,8 +999,8 @@ mod tests {
         assert_eq!(c.idle_off_timeout_minutes(), 30);
     }
 
-    /// The status reports "waiting" while the on-zone has not reached its
-    /// setpoint, with the full hold time still showing (no countdown active).
+    /// The status reports "waiting" (no target time) while the on-zone has
+    /// not reached its setpoint.
     #[test]
     fn status_waiting_when_not_at_setpoint() {
         let s = snap_with_zone(24.0, 23.0); // Cool: 24.0 > 23.5 -> not satisfied.
@@ -984,31 +1013,48 @@ mod tests {
         assert!(!st.at_setpoint, "should not be at setpoint");
         assert_eq!(st.on_zones, 1);
         assert_eq!(st.satisfied, 0);
-        // No countdown started, so the full hold (15m) is shown.
-        assert_eq!(st.remaining_min, 15);
+        assert!(st.target_time.is_none(), "no target time while waiting");
     }
 
-    /// Once the condition holds and the countdown is partway through, the
-    /// remaining minutes count down from the hold time.
+    /// Once the condition holds and the countdown is running, the status
+    /// reports the fixed wall-clock shutoff time (since + hold) as "HH:MM".
     #[test]
-    fn status_countdown_when_at_setpoint() {
+    fn status_target_time_when_at_setpoint() {
         let s = snap_with_zone(23.0, 23.0); // satisfied.
         let cfg = AutomationConfig {
             setpoint_off_enabled: true,
             setpoint_off_hold: Duration::from_secs(15 * 60),
             ..AutomationConfig::default()
         };
-        // Countdown started 5 minutes ago -> 10 of 15 minutes remain.
         let since = Instant::now().checked_sub(Duration::from_secs(5 * 60));
         let st = setpoint_off_status(&s, &cfg, since);
         assert!(st.at_setpoint, "should be at setpoint");
-        assert_eq!(st.remaining_min, 10, "10 minutes should remain");
+        let t = st.target_time.expect("target time should be set");
+        assert!(t.len() == 5 && t.as_bytes()[2] == b':', "HH:MM shape: {t}");
     }
 
-    /// When the hold has fully elapsed the remaining minutes clamp to 0
-    /// (the engine fires on its next tick, shown as "<1 min").
+    /// The target time is fixed at `since + hold` and does not drift as time
+    /// passes (so the card is not re-rendered every minute).
     #[test]
-    fn status_countdown_zero_when_held() {
+    fn status_target_time_is_stable() {
+        let s = snap_with_zone(23.0, 23.0);
+        let cfg = AutomationConfig {
+            setpoint_off_enabled: true,
+            setpoint_off_hold: Duration::from_secs(15 * 60),
+            ..AutomationConfig::default()
+        };
+        let since = Instant::now().checked_sub(Duration::from_secs(5 * 60));
+        let a = setpoint_off_status(&s, &cfg, since).target_time;
+        std::thread::sleep(Duration::from_millis(50));
+        let b = setpoint_off_status(&s, &cfg, since).target_time;
+        assert_eq!(a, b, "target time must not drift as time passes");
+    }
+
+    /// When the hold has fully elapsed the target time is None (the engine
+    /// fires on its next tick); the card falls back to a time-less message
+    /// rather than showing a past clock time.
+    #[test]
+    fn status_target_time_none_when_held() {
         let s = snap_with_zone(23.0, 23.0);
         let cfg = AutomationConfig {
             setpoint_off_enabled: true,
@@ -1019,7 +1065,10 @@ mod tests {
         let since = Instant::now().checked_sub(Duration::from_secs(20 * 60));
         let st = setpoint_off_status(&s, &cfg, since);
         assert!(st.at_setpoint);
-        assert_eq!(st.remaining_min, 0, "remaining should clamp to 0");
+        assert!(
+            st.target_time.is_none(),
+            "no target time once the hold has elapsed"
+        );
     }
 
     /// The idle status reports a wall-clock target time shaped "HH:MM" when

@@ -12,6 +12,7 @@ use crate::web::state::AppState;
 pub async fn index(State(state): State<AppState>) -> Result<Html<String>, AppError> {
     let snap = state.manager.snapshot_rx.borrow().clone();
     let cfg = state.automation.get();
+    state.automation.ensure_setpoint_countdown(&snap);
     let status = state.automation.setpoint_off_status(&snap);
     let idle = state.automation.idle_off_status(&snap);
     Ok(Html(templates::render_index(&snap, &cfg, &status, &idle)))
@@ -52,6 +53,7 @@ pub async fn partial_zones(State(state): State<AppState>) -> Html<String> {
 pub async fn partial_automation(State(state): State<AppState>) -> Html<String> {
     let cfg = state.automation.get();
     let snap = state.manager.snapshot_rx.borrow().clone();
+    state.automation.ensure_setpoint_countdown(&snap);
     let status = state.automation.setpoint_off_status(&snap);
     let idle = state.automation.idle_off_status(&snap);
     Html(templates::render_automation(&cfg, &status, &idle))

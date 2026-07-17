@@ -19,10 +19,15 @@
     </div>
     {% if config.setpoint_off_enabled && status.ac_on %}
       {% if status.at_setpoint %}
-      <div class="program-status ok">
-        All zones at setpoint -- turning the AC off in
-        {% if status.remaining_min == 0 %}<1{% else %}{{ status.remaining_min }}{% endif %} min
-      </div>
+        {% if let Some(t) = status.target_time %}
+        <div class="program-status ok">
+          All zones at setpoint -- powering system off at {{ t }}
+        </div>
+        {% else %}
+        <div class="program-status ok">
+          All zones at setpoint -- powering system off
+        </div>
+        {% endif %}
       {% else %}
       <div class="program-status wait">
         Waiting for setpoint -- {{ status.satisfied }}/{{ status.on_zones }} zones reached

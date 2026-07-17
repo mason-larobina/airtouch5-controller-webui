@@ -1646,8 +1646,12 @@ async fn setpoint_off_status_shows_countdown_badge() {
             "expected at-setpoint copy: {setpoint}"
         );
         assert!(
-            setpoint.contains("15 min"),
-            "expected the 15-minute countdown: {setpoint}"
+            setpoint.contains("powering system off at"),
+            "expected the wall-clock target-time copy: {setpoint}"
+        );
+        assert!(
+            target_time(&setpoint).is_some(),
+            "expected an HH:MM target time in the at-setpoint badge: {setpoint}"
         );
     })
     .await;
@@ -1738,7 +1742,10 @@ async fn idle_off_status_target_changes_with_timeout() {
 
 /// Extract the "HH:MM" target time from an idle program card's status line.
 fn target_time(card: &str) -> Option<String> {
-    let anchor = "Powering system off at ";
+    // Both cards say "...system off at HH:MM"; match on the common tail so it
+    // works for the setpoint card ("...powering system off at") and the idle
+    // card ("Powering system off at").
+    let anchor = "system off at ";
     let rest = card.split(anchor).nth(1)?;
     let hhmm = rest.split('<').next()?.trim();
     if hhmm.len() == 5 && hhmm.as_bytes()[2] == b':' {

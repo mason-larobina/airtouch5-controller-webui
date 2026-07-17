@@ -92,6 +92,10 @@ fn make_event_stream(
 /// `zone-<id>` events rather than a single `acs`/`zones` blob so the
 /// browser's `sse-swap` listeners on individual cards fire.)
 fn full_events(snap: &Snapshot, automation: &AutomationStore) -> Vec<Event> {
+    // If the setpoint condition already holds at connect time, start the
+    // countdown so the initial render shows the "powering off at HH:MM" target
+    // (the engine seeds it on its first tick, which may not have run yet).
+    automation.ensure_setpoint_countdown(snap);
     let mut out = Vec::new();
     out.push(named("state", templates::render_connection_state(snap)));
     out.push(named("system", templates::render_system(snap)));
@@ -149,12 +153,30 @@ fn diff_events(prev: &Snapshot, new: &Snapshot, automation: &AutomationStore) ->
         automation.set_idle_last_change(Some(std::time::Instant::now()));
     }
 
+    // Mirror the engine's setpoint countdown so the "powering off at HH:MM"
+    // target is available the moment the condition flips true (the engine
+    // sets it on its next tick, which can lag the snapshot). Start the
+    // countdown when the condition goes true; clear it when it goes false;
+    // otherwise leave it alone so the fixed target time does not drift.
+    let prev_sp = automation.setpoint_off_status(prev);
+    let new_sp = automation.setpoint_off_status(new);
+    let prev_cond = prev_sp.ac_on && prev_sp.at_setpoint;
+    let new_cond = new_sp.ac_on && new_sp.at_setpoint;
+    match (prev_cond, new_cond) {
+        (false, true) => automation.set_setpoint_since(Some(std::time::Instant::now())),
+        (true, false) => automation.set_setpoint_since(None),
+        _ => {}
+    }
+    // Recompute after the countdown management so the comparison reflects the
+    // (possibly just-started) target time.
+    let new_sp = automation.setpoint_off_status(new);
+
     // Re-emit the automation card when either program's derived status
-    // (setpoint-off countdown or idle-off target time) changes, so the live
-    // badges stay current. The idle target time is a fixed wall-clock value
-    // that only shifts on a control change or timeout preset change, so this
-    // does not re-emit on every sensor-drift snapshot.
-    if automation.setpoint_off_status(prev) != automation.setpoint_off_status(new)
+    // (setpoint-off target time or idle-off target time) changes, so the live
+    // badges stay current. Both target times are fixed wall-clock values that
+    // only shift on a control change or preset change, so this does not re-emit
+    // on every sensor-drift snapshot.
+    if prev_sp != new_sp
         || automation.idle_off_status(prev) != automation.idle_off_status(new)
     {
         out.push(named("automation", render_automation(automation, new)));

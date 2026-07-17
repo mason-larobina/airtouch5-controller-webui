@@ -68,6 +68,7 @@ pub async fn set_idle_off_timeout(
 fn render(state: &AppState) -> Html<String> {
     let cfg = state.automation.get();
     let snap = state.manager.snapshot_rx.borrow().clone();
+    state.automation.ensure_setpoint_countdown(&snap);
     let status = state.automation.setpoint_off_status(&snap);
     let idle = state.automation.idle_off_status(&snap);
     Html(templates::render_automation(&cfg, &status, &idle))
