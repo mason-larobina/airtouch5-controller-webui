@@ -228,6 +228,9 @@ async fn mock_loop(
                 f(&mut snap);
                 let _ = snapshot_tx.send(snap.clone());
             }
+            // Both command channels closed (manager + controller handles
+            // dropped, e.g. at shutdown): exit instead of panicking.
+            else => break,
         }
     }
 }

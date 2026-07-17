@@ -25,8 +25,14 @@ async fn spawn_server() -> (SocketAddr, MockController) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        // No graceful shutdown: cancelled when the test runtime drops.
-        let _ = axum::serve(listener, app).await;
+        // No graceful shutdown: cancelled when the test runtime drops. Use
+        // the connect-info make service so the request-log middleware has a
+        // real client IP to log, exactly as the production binary does.
+        let _ = axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await;
     });
     (addr, mock_ctrl)
 }
@@ -818,6 +824,102 @@ async fn ac_power_toggle_turns_off() {
             !body.contains("power-badge"),
             "the top-right power badge should be gone, got: {body}"
         );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn ac_power_on_rejected_when_all_zones_off() {
+    capped(async {
+        let (addr, mock) = spawn_server().await;
+        // Turn every zone on AC 0 off at the wall console.
+        mock.mutate(|s| {
+            for z in s.zones.values_mut() {
+                if z.ac_id == Some(0) {
+                    z.power = ZonePowerView::Off;
+                }
+            }
+        })
+        .await;
+
+        // Starting the AC now must be rejected (422) with a helpful message.
+        let resp = client()
+            .post(format!("http://{addr}/ac/0/power"))
+            .form(&[("power", "on")])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+        let body = resp.text().await.unwrap();
+        assert!(
+            body.contains("at least one zone"),
+            "expected a 'turn on a zone' message, got: {body}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn ac_power_toggle_rejected_when_all_zones_off() {
+    capped(async {
+        let (addr, mock) = spawn_server().await;
+        // AC 0 is On; turn it off, and turn every zone off.
+        mock.mutate(|s| {
+            if let Some(ac) = s.acs.get_mut(&0)
+                && let Some(st) = ac.status.as_mut()
+            {
+                st.power = Some("Off");
+            }
+            for z in s.zones.values_mut() {
+                if z.ac_id == Some(0) {
+                    z.power = ZonePowerView::Off;
+                }
+            }
+        })
+        .await;
+
+        // Toggling (which would turn the AC on) must be rejected while all
+        // zones are off.
+        let resp = client()
+            .post(format!("http://{addr}/ac/0/power"))
+            .form(&[("power", "toggle")])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn ac_power_on_allowed_when_a_zone_is_on() {
+    capped(async {
+        let (addr, mock) = spawn_server().await;
+        // Turn the AC off but leave zone 0 on, then start the AC: allowed.
+        mock.mutate(|s| {
+            if let Some(ac) = s.acs.get_mut(&0)
+                && let Some(st) = ac.status.as_mut()
+            {
+                st.power = Some("Off");
+            }
+            if let Some(z) = s.zones.get_mut(&0) {
+                z.power = ZonePowerView::On;
+            }
+            for z in s.zones.values_mut() {
+                if z.id != 0 && z.ac_id == Some(0) {
+                    z.power = ZonePowerView::Off;
+                }
+            }
+        })
+        .await;
+
+        let resp = client()
+            .post(format!("http://{addr}/ac/0/power"))
+            .form(&[("power", "on")])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::OK);
     })
     .await;
 }

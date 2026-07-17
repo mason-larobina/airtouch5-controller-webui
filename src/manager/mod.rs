@@ -11,11 +11,19 @@ use airtouch5::AirTouch5;
 
 use crate::airtouch;
 use crate::config::Config;
-use crate::manager::command::{AcControlReq, Command, ZoneControlReq};
+use crate::manager::command::Command;
 use crate::manager::snapshot::{build_snapshot, StaticInfo};
 
 pub mod command;
 pub mod snapshot;
+
+/// Maximum time allowed for a single console API call (a control message or a
+/// status re-pull). A request that exceeds this is aborted and the connection
+/// is treated as poisoned: the manager drops the `AirTouch5` handle and
+/// re-discovers/reconnects. Without this, a single hung request blocks the
+/// one-task command loop (commands are applied serially), so every later
+/// click piles up behind it and the UI silently deadlocks.
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A cheap, cloneable handle the web layer uses to talk to the manager.
 #[derive(Clone)]
@@ -123,9 +131,14 @@ async fn run_connected(
                 }
             }
 
-            // Incoming command from the web layer.
+            // Incoming command from the web layer. A timeout poisons the
+            // connection: we return `Err(())` to trigger a reconnect rather
+            // than keep serving on a stalled socket.
             Some(cmd) = cmd_rx.recv() => {
-                handle_command(&at5, cmd, &static_info, &status_rx, snapshot_tx).await;
+                if handle_command(&at5, cmd, &static_info, &status_rx, snapshot_tx).await.is_err() {
+                    tracing::warn!("command timed out; dropping connection to reconnect");
+                    return Err(());
+                }
             }
         }
     }
@@ -142,75 +155,107 @@ async fn status_changed(rx: watch::Receiver<CurrentStatus>) -> Result<CurrentSta
 
 /// Apply a single command, fold any post-change status into the snapshot, then
 /// reply on the command's oneshot.
+///
+/// Returns `Err(())` when a console API call exceeded [`COMMAND_TIMEOUT`]: the
+/// connection is poisoned and the caller should drop it and reconnect. A
+/// normal API error (the console responded with an error) is replied to the
+/// handler and the connection is kept; only a timeout forces a reconnect.
+#[allow(clippy::too_many_lines)]
 async fn handle_command(
     at5: &AirTouch5,
     cmd: Command,
     static_info: &StaticInfo,
     status_rx: &watch::Receiver<CurrentStatus>,
     snapshot_tx: &watch::Sender<snapshot::Snapshot>,
-) {
+) -> Result<(), ()> {
     match cmd {
         Command::Refresh { reply } => {
-            let res = async {
+            let outcome = tokio::time::timeout(COMMAND_TIMEOUT, async {
                 at5.ac_status().await?;
                 at5.zone_status().await?;
                 Ok::<_, std::io::Error>(())
+            })
+            .await;
+            match outcome {
+                Ok(Ok(())) => {
+                    let cur = status_rx.borrow().clone();
+                    let snap = build_snapshot(true, static_info, &cur);
+                    let _ = snapshot_tx.send(snap);
+                    let _ = reply.send(Ok(()));
+                    Ok(())
+                }
+                Ok(Err(e)) => {
+                    let msg = e.to_string();
+                    tracing::warn!("refresh failed: {msg}");
+                    let _ = reply.send(Err(msg));
+                    Ok(())
+                }
+                Err(_elapsed) => {
+                    tracing::error!(
+                        "refresh timed out after {COMMAND_TIMEOUT:?}; reconnecting"
+                    );
+                    let _ = reply.send(Err("console request timed out".to_string()));
+                    Err(())
+                }
             }
-            .await
-            .map_err(|e| e.to_string());
-            // Publish a freshly-built snapshot from the now-updated watch.
-            if res.is_ok() {
-                let cur = status_rx.borrow().clone();
-                let snap = build_snapshot(true, static_info, &cur);
-                let _ = snapshot_tx.send(snap);
-            }
-            let _ = reply.send(res);
         }
         Command::ControlZone { id, req, reply } => {
-            let res = apply_zone_control(at5, id, req, static_info, status_rx, snapshot_tx).await;
-            let _ = reply.send(res);
+            let outcome =
+                tokio::time::timeout(COMMAND_TIMEOUT, at5.control_zone(id, req.to_zone_control()))
+                    .await;
+            match outcome {
+                Ok(Ok(msg)) => {
+                    let mut cur = status_rx.borrow().clone();
+                    cur.apply(&StatusChange::ZoneStatusChange(msg.into()));
+                    let snap = build_snapshot(true, static_info, &cur);
+                    let _ = snapshot_tx.send(snap);
+                    let _ = reply.send(Ok(()));
+                    Ok(())
+                }
+                Ok(Err(e)) => {
+                    let msg = e.to_string();
+                    tracing::warn!("zone {id} control failed: {msg}");
+                    let _ = reply.send(Err(msg));
+                    Ok(())
+                }
+                Err(_elapsed) => {
+                    tracing::error!(
+                        "zone {id} control timed out after {COMMAND_TIMEOUT:?}; reconnecting"
+                    );
+                    let _ = reply.send(Err("console request timed out".to_string()));
+                    Err(())
+                }
+            }
         }
         Command::ControlAc { id, req, reply } => {
-            let res = apply_ac_control(at5, id, req, static_info, status_rx, snapshot_tx).await;
-            let _ = reply.send(res);
+            let outcome =
+                tokio::time::timeout(COMMAND_TIMEOUT, at5.control_ac(id, req.to_ac_control()))
+                    .await;
+            match outcome {
+                Ok(Ok(msg)) => {
+                    let mut cur = status_rx.borrow().clone();
+                    cur.apply(&StatusChange::AcStatusChange(msg.into()));
+                    let snap = build_snapshot(true, static_info, &cur);
+                    let _ = snapshot_tx.send(snap);
+                    let _ = reply.send(Ok(()));
+                    Ok(())
+                }
+                Ok(Err(e)) => {
+                    let msg = e.to_string();
+                    tracing::warn!("ac {id} control failed: {msg}");
+                    let _ = reply.send(Err(msg));
+                    Ok(())
+                }
+                Err(_elapsed) => {
+                    tracing::error!(
+                        "ac {id} control timed out after {COMMAND_TIMEOUT:?}; reconnecting"
+                    );
+                    let _ = reply.send(Err("console request timed out".to_string()));
+                    Err(())
+                }
+            }
         }
     }
-}
-
-async fn apply_zone_control(
-    at5: &AirTouch5,
-    id: u8,
-    req: ZoneControlReq,
-    static_info: &StaticInfo,
-    status_rx: &watch::Receiver<CurrentStatus>,
-    snapshot_tx: &watch::Sender<snapshot::Snapshot>,
-) -> Result<(), String> {
-    let zc = req.to_zone_control();
-    let msg = at5.control_zone(id, zc).await.map_err(|e| e.to_string())?;
-    // Fold the post-change zone status into the current status and republish
-    // the snapshot for snappy UX (the async watch will reconcile shortly).
-    let mut cur = status_rx.borrow().clone();
-    cur.apply(&StatusChange::ZoneStatusChange(msg.into()));
-    let snap = build_snapshot(true, static_info, &cur);
-    let _ = snapshot_tx.send(snap);
-    Ok(())
-}
-
-async fn apply_ac_control(
-    at5: &AirTouch5,
-    id: u8,
-    req: AcControlReq,
-    static_info: &StaticInfo,
-    status_rx: &watch::Receiver<CurrentStatus>,
-    snapshot_tx: &watch::Sender<snapshot::Snapshot>,
-) -> Result<(), String> {
-    let ac = req.to_ac_control();
-    let msg = at5.control_ac(id, ac).await.map_err(|e| e.to_string())?;
-    let mut cur = status_rx.borrow().clone();
-    cur.apply(&StatusChange::AcStatusChange(msg.into()));
-    let snap = build_snapshot(true, static_info, &cur);
-    let _ = snapshot_tx.send(snap);
-    Ok(())
 }
 
 /// Mark the snapshot as disconnected while preserving last-known state (so the

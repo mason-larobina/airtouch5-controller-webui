@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod handlers;
+pub mod log;
 pub mod sse;
 pub mod state;
 
@@ -55,6 +56,10 @@ pub fn build_router(manager: ManagerHandle) -> Router {
         .route("/ac/{id}/setpoint", post(handlers::ac::setpoint))
         // Vendor assets (versioned, immutable cache)
         .nest_service("/vendor", vendor)
+        // Interaction logging: control actions at info (ip + action + result),
+        // everything else at debug. Applied as the outermost layer so its
+        // elapsed time covers the whole request.
+        .layer(axum::middleware::from_fn(log::request_log))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &axum::extract::Request| {

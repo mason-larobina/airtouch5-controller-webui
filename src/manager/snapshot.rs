@@ -66,6 +66,16 @@ impl Snapshot {
             BulkModeView::Airflow
         }
     }
+
+    /// True if at least one zone belonging to AC `ac_id` is currently on (On or
+    /// Turbo). Used by the AC power handler to reject starting an AC while
+    /// every one of its zones is off -- the console would otherwise run the
+    /// unit with no airflow path.
+    pub fn ac_has_open_zone(&self, ac_id: u8) -> bool {
+        self.zones
+            .values()
+            .any(|z| z.ac_id == Some(ac_id) && z.is_on())
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]

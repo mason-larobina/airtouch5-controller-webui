@@ -12,6 +12,10 @@ use crate::web::error::AppError;
 use crate::web::state::AppState;
 
 /// `POST /ac/:id/power` -- `power = on | off | away | sleep | toggle`.
+///
+/// Starting the AC (explicit `on`, or a `toggle` that resolves to on) is
+/// rejected with a 422 while every zone on that AC is off: the console would
+/// run the unit with no open airflow path. The user must turn a zone on first.
 pub async fn power(
     State(state): State<AppState>,
     Path(id): Path<u8>,
@@ -26,6 +30,30 @@ pub async fn power(
         "toggle" => AcPower::Toggle,
         other => return Err(AppError::msg(format!("unknown power: {other:?}"))),
     };
+    // Guard against an invalid state: starting the AC with all its zones off.
+    // Only applies to ACs that actually exist; a nonexistent AC falls through
+    // to `send_ac`, which returns the proper "ac not found" error.
+    let turns_on = match ac {
+        AcPower::On => true,
+        AcPower::Toggle => {
+            let snap = state.manager.snapshot_rx.borrow().clone();
+            // The mock treats On/Sleep/AwayOff/AwayOn as active, so a toggle
+            // only turns the AC on when it is currently Off (or has no status).
+            !matches!(
+                snap.acs.get(&id).and_then(|a| a.power()),
+                Some("On") | Some("Sleep") | Some("AwayOff") | Some("AwayOn")
+            )
+        }
+        _ => false,
+    };
+    if turns_on {
+        let snap = state.manager.snapshot_rx.borrow().clone();
+        if snap.acs.contains_key(&id) && !snap.ac_has_open_zone(id) {
+            return Err(AppError::msg(
+                "turn on at least one zone for this AC before starting it",
+            ));
+        }
+    }
     send_ac(state.manager.clone(), id, AcControlReq::Power(ac)).await?;
     render_current_ac(&state.manager, id)
 }

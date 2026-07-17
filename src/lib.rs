@@ -51,7 +51,7 @@ pub async fn serve(manager: ManagerHandle, bind: SocketAddr, timeout: Option<Dur
         tracing::info!("auto-shutdown after {t:?}");
     }
     tokio::select! {
-        res = axum::serve(listener, app) => res.expect("server error"),
+        res = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()) => res.expect("server error"),
         _ = shutdown_signal(timeout) => {
             tracing::info!("shutting down now (closing in-flight requests, e.g. SSE)");
         }
