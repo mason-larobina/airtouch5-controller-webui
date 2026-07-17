@@ -104,9 +104,27 @@ async fn run_connected(
     snapshot_tx: &watch::Sender<snapshot::Snapshot>,
     cmd_rx: &mut mpsc::Receiver<Command>,
 ) -> Result<(), ()> {
-    let status_rx = at5
+    let mut status_rx = at5
         .subscribe_status()
         .ok_or_else(|| tracing::error!("subscribe_status returned None"))?;
+
+    // A read-only clone handed to command handlers so they can `borrow()` the
+    // current status. `borrow()` returns the latest value regardless of the
+    // receiver's seen-version, so this clone's version being frozen at
+    // subscribe time is harmless here -- it is never used with `changed()`.
+    //
+    // The canonical `status_rx` is the only receiver whose seen-version we
+    // advance (via `changed()` / `borrow_and_update()`), and it is the one we
+    // wait on in the `select!`. Keeping the version tracking on a single
+    // receiver is what avoids the busy-loop: cloning a `watch::Receiver`
+    // copies its seen-version, and the previous code cloned `status_rx` fresh
+    // every loop iteration without ever advancing the original's version.
+    // Once the console's status watch advanced past the subscribe-time
+    // version -- which first happens on the very first real status change,
+    // i.e. the first control interaction -- every fresh clone's `changed()`
+    // returned `Ready` immediately, rebuilding and re-publishing the same
+    // snapshot forever and pinning a core at 100%.
+    let status_read_rx = status_rx.clone();
 
     // Publish an initial snapshot from the primed watch.
     {
@@ -117,14 +135,18 @@ async fn run_connected(
 
     loop {
         tokio::select! {
-            // Live status update -> rebuild snapshot and publish.
-            res = status_changed(status_rx.clone()) => {
+            // Live status update -> rebuild snapshot and publish. `changed()`
+            // runs on the single canonical receiver and advances its
+            // seen-version when it resolves, so it blocks until the *next*
+            // change rather than spinning on a stale clone.
+            res = status_rx.changed() => {
                 match res {
-                    Ok(cur) => {
+                    Ok(()) => {
+                        let cur = status_rx.borrow_and_update().clone();
                         let snap = build_snapshot(true, &static_info, &cur);
                         let _ = snapshot_tx.send(snap);
                     }
-                    Err(()) => {
+                    Err(_) => {
                         tracing::warn!("status watch closed; connection lost");
                         return Err(());
                     }
@@ -135,22 +157,13 @@ async fn run_connected(
             // connection: we return `Err(())` to trigger a reconnect rather
             // than keep serving on a stalled socket.
             Some(cmd) = cmd_rx.recv() => {
-                if handle_command(&at5, cmd, &static_info, &status_rx, snapshot_tx).await.is_err() {
+                if handle_command(&at5, cmd, &static_info, &status_read_rx, snapshot_tx).await.is_err() {
                     tracing::warn!("command timed out; dropping connection to reconnect");
                     return Err(());
                 }
             }
         }
     }
-}
-
-/// Wait for the next status change on a watch receiver, returning the new
-/// `CurrentStatus`. Returns `Err(())` if the sender was dropped (connection
-/// lost).
-async fn status_changed(rx: watch::Receiver<CurrentStatus>) -> Result<CurrentStatus, ()> {
-    let mut rx = rx;
-    rx.changed().await.map_err(|_| ())?;
-    Ok(rx.borrow().clone())
 }
 
 /// Apply a single command, fold any post-change status into the snapshot, then
@@ -264,4 +277,85 @@ fn push_disconnected(snapshot_tx: &watch::Sender<snapshot::Snapshot>) {
     let mut snap = snapshot_tx.borrow().clone();
     snap.connected = false;
     let _ = snapshot_tx.send(snap);
+}
+
+#[cfg(test)]
+mod tests {
+    //! Regression tests for the status-watch pattern in `run_connected`.
+    //!
+    //! The real connection manager (unlike the mock used by the e2e tests)
+    //! waits on a `tokio::sync::watch::Receiver<CurrentStatus>` from the
+    //! airtouch5 crate's IO loop. The original code cloned that receiver fresh
+    //! every `tokio::select!` iteration; cloning copies the receiver's
+    //! seen-version, and the original's version was never advanced, so every
+    //! clone carried the stale subscribe-time version. Once the watch had
+    //! advanced past it (first real status change = first interaction),
+    //! `changed()` on every fresh clone returned `Ready` immediately and the
+    //! loop spun at 100% CPU.
+    //!
+    //! These tests pin down the `watch` invariant the fix relies on: a single
+    //! receiver advanced via `changed()` blocks until the *next* change, while a
+    //! freshly cloned receiver (whose seen-version is frozen) reports the last
+    //! change as new forever. They guard against a revert that reintroduces the
+    //! per-iteration clone.
+
+    use std::time::Duration;
+    use tokio::sync::watch;
+
+    /// A single receiver kept in sync via `changed()` blocks until the *next*
+    /// change -- it does not repeatedly return `Ready` for the same change.
+    #[tokio::test]
+    async fn single_receiver_changed_blocks_for_next_change() {
+        let (tx, mut rx) = watch::channel(0u32);
+
+        // First change: changed() resolves, advancing the receiver's version.
+        tx.send(1).unwrap();
+        assert!(rx.changed().await.is_ok());
+        assert_eq!(*rx.borrow(), 1);
+
+        // No further change: changed() must BLOCK, not spin. Give it a short
+        // window to (incorrectly) resolve; if it ever returns, that's the bug.
+        let polled = tokio::time::timeout(Duration::from_millis(50), rx.changed()).await;
+        assert!(
+            polled.is_err(),
+            "changed() returned after no new change; the receiver is not tracking \
+             its seen-version and would busy-loop the manager select"
+        );
+    }
+
+    /// A fresh clone of a receiver whose seen-version was never advanced reports
+    /// every already-occurred change as new -- this is the footgun the fix
+    /// avoids by waiting on a single canonical receiver instead of cloning per
+    /// iteration.
+    #[tokio::test]
+    async fn fresh_clone_reports_stale_change_as_ready() {
+        let (tx, rx) = watch::channel(0u32);
+
+        // Advance the watch once. The original receiver's version is never
+        // advanced (it is only ever cloned, mirroring the old buggy pattern).
+        tx.send(1).unwrap();
+
+        // A fresh clone carries the original's frozen (subscribe-time) version,
+        // so changed() resolves immediately -- and would keep doing so on every
+        // subsequent fresh clone, spinning the loop.
+        let mut clone = rx.clone();
+        assert!(clone.changed().await.is_ok());
+
+        // A second fresh clone still sees the same already-occurred change as
+        // new: the loop never makes progress, just burns a core.
+        let mut clone2 = rx.clone();
+        assert!(clone2.changed().await.is_ok());
+        assert_eq!(*clone2.borrow(), 1);
+
+        // Contrast: the single-receiver pattern (borrow_and_update + changed on
+        // the same receiver) blocks for the next change.
+        let mut single = rx.clone();
+        let _ = single.borrow_and_update(); // sync its version to current
+        let polled = tokio::time::timeout(Duration::from_millis(50), single.changed()).await;
+        assert!(
+            polled.is_err(),
+            "a synced single receiver must block for the next change, not return \
+             Ready for a stale one"
+        );
+    }
 }
