@@ -349,13 +349,13 @@ h1 {
   box-shadow: var(--shadow);
   overflow: hidden;
 }
-/* Bulk "all zones" control bar at the top of the zone list: a label, a
-   The bulk bar also carries ON/OFF buttons that toggle every zone at
-   once. The % / Temp toggle is purely visual: it only swaps which preset
-   row is shown (CSS driven by the `data-bulk-mode` attribute) and never
-   issues a request -- the actual command is sent when a preset is
-   clicked. It lives inside #zones so a bulk POST that re-renders the
-   partial swaps it in along with the zone rows. */
+/* Bulk "all zones" control bar at the top of the zone list: ON/OFF
+   buttons that toggle every zone at once, a preset row, and a purely
+   visual % / Temp toggle that only swaps which preset row is shown (CSS
+   driven by the `data-bulk-mode` attribute) and never issues a request --
+   the actual command is sent when a preset is clicked. It lives inside
+   #zones so a bulk POST that re-renders the partial swaps it in along
+   with the zone rows. */
 .bulk-bar {
   display: flex;
   align-items: center;
@@ -364,14 +364,6 @@ h1 {
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   background: var(--panel-2);
-}
-.bulk-bar .bulk-label {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 600;
-  white-space: nowrap;
 }
 .bulk-bar .bulk-mode {
   flex: none;
@@ -449,7 +441,7 @@ h1 {
   flex-wrap: nowrap;
 }
 .zone-name .name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   flex: 1 1 auto;
   min-width: 0;
@@ -488,7 +480,7 @@ h1 {
 }
 .zone-temp {
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 16px;
   color: var(--muted);
   text-align: right;
   overflow: hidden;
@@ -532,7 +524,7 @@ h1 {
   width: var(--btn-step-w);
   min-height: var(--btn-h);
   padding: 10px 0;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   display: inline-flex;
   align-items: center;

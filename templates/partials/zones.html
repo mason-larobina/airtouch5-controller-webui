@@ -1,6 +1,5 @@
 <div id="zones" class="zone-list" sse-swap="zones" hx-swap="outerHTML">
   <div class="bulk-bar" data-bulk-mode="{{ bulk_mode.as_str() }}">
-    <span class="bulk-label">All zones</span>
     <div class="power-group">
       <button type="button" class="btn"
               hx-post="/zones/power" hx-vals='{"power":"on"}'

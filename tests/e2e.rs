@@ -650,9 +650,6 @@ async fn zones_partial_renders_bulk_bar_with_airflow_presets() {
             .text()
             .await
             .unwrap();
-        assert!(body.contains("All zones"), "bulk bar label missing");
-
-        // ON / OFF bulk power buttons must be present and post to /zones/power.
         assert!(
             body.contains("hx-post=\"/zones/power\" hx-vals='{\"power\":\"on\"}'"),
             "bulk ON button missing, got: {body}"
