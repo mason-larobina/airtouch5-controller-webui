@@ -6,7 +6,7 @@
 
 use askama::Template;
 
-use crate::automation::AutomationConfig;
+use crate::automation::{AutomationConfig, SetpointOffStatus};
 use crate::manager::snapshot::{AcView, BulkModeView, Snapshot, ZoneView};
 
 #[derive(Template)]
@@ -15,13 +15,19 @@ pub struct IndexTemplate<'a> {
     pub snapshot: &'a Snapshot,
     pub bulk_mode: BulkModeView,
     pub config: &'a AutomationConfig,
+    pub status: &'a SetpointOffStatus,
 }
 
-pub fn render_index(snapshot: &Snapshot, config: &AutomationConfig) -> String {
+pub fn render_index(
+    snapshot: &Snapshot,
+    config: &AutomationConfig,
+    status: &SetpointOffStatus,
+) -> String {
     IndexTemplate {
         snapshot,
         bulk_mode: snapshot.bulk_mode(),
         config,
+        status,
     }
     .render()
     .unwrap_or_default()
@@ -68,6 +74,7 @@ pub struct ZoneTemplate<'a> {
 #[template(path = "partials/automation.html")]
 pub struct AutomationTemplate<'a> {
     pub config: &'a AutomationConfig,
+    pub status: &'a SetpointOffStatus,
 }
 
 /// Render a fragment to a String for use as an SSE `data:` payload or a POST
@@ -111,6 +118,8 @@ pub fn render_zones_with_bulk(snapshot: &Snapshot, bulk_mode: BulkModeView) -> S
 }
 
 /// Render the automation programs configuration partial (`#automation`).
-pub fn render_automation(config: &AutomationConfig) -> String {
-    AutomationTemplate { config }.render().unwrap_or_default()
+pub fn render_automation(config: &AutomationConfig, status: &SetpointOffStatus) -> String {
+    AutomationTemplate { config, status }
+        .render()
+        .unwrap_or_default()
 }

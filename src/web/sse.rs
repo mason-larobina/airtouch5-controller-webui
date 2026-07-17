@@ -24,6 +24,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use futures_util::stream::{self, Stream, StreamExt};
 
+use crate::automation::AutomationStore;
 use crate::manager::snapshot::Snapshot;
 use crate::templates;
 use crate::web::state::AppState;
@@ -31,13 +32,15 @@ use crate::web::state::AppState;
 /// Axum handler for `GET /events`.
 pub async fn sse_events(axum::extract::State(state): axum::extract::State<AppState>) -> Response {
     let rx = state.manager.snapshot_rx.clone();
-    let stream = make_event_stream(rx);
+    let automation = state.automation.clone();
+    let stream = make_event_stream(rx, automation);
     Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
 }
 
 /// Internal state carried across stream yields.
 struct SseState {
     rx: tokio::sync::watch::Receiver<Snapshot>,
+    automation: AutomationStore,
     prev: Snapshot,
     pending: VecDeque<Event>,
 }
@@ -48,12 +51,14 @@ struct SseState {
 /// populates everything, then per-change diffs thereafter.
 fn make_event_stream(
     rx: tokio::sync::watch::Receiver<Snapshot>,
+    automation: AutomationStore,
 ) -> impl Stream<Item = Result<Event, Infallible>> + Send {
     let initial = rx.borrow().clone();
-    let initial_events: Vec<Event> = full_events(&initial);
+    let initial_events: Vec<Event> = full_events(&initial, &automation);
 
     let state = SseState {
         rx,
+        automation,
         prev: initial,
         pending: VecDeque::new(),
     };
@@ -73,7 +78,7 @@ fn make_event_stream(
                 // No net change worth re-emitting.
                 continue;
             }
-            for ev in diff_events(&s.prev, &new) {
+            for ev in diff_events(&s.prev, &new, &s.automation) {
                 s.pending.push_back(ev);
             }
             s.prev = new;
@@ -83,10 +88,10 @@ fn make_event_stream(
 }
 
 /// The full set of events for an initial render: state, system, every AC, every
-/// zone. (We deliberately emit per-id `ac-<id>`/`zone-<id>` events rather than a
-/// single `acs`/`zones` blob so the browser's `sse-swap` listeners on individual
-/// cards fire.)
-fn full_events(snap: &Snapshot) -> Vec<Event> {
+/// zone, plus the automation card. (We deliberately emit per-id `ac-<id>`/
+/// `zone-<id>` events rather than a single `acs`/`zones` blob so the
+/// browser's `sse-swap` listeners on individual cards fire.)
+fn full_events(snap: &Snapshot, automation: &AutomationStore) -> Vec<Event> {
     let mut out = Vec::new();
     out.push(named("state", templates::render_connection_state(snap)));
     out.push(named("system", templates::render_system(snap)));
@@ -96,11 +101,12 @@ fn full_events(snap: &Snapshot) -> Vec<Event> {
     for zone in snap.zones.values() {
         out.push(named(&format!("zone-{}", zone.id), templates::render_zone(zone)));
     }
+    out.push(named("automation", render_automation(automation, snap)));
     out
 }
 
 /// Diff two snapshots and emit only the changed fragments.
-fn diff_events(prev: &Snapshot, new: &Snapshot) -> Vec<Event> {
+fn diff_events(prev: &Snapshot, new: &Snapshot, automation: &AutomationStore) -> Vec<Event> {
     let mut out = Vec::new();
 
     if prev.connected != new.connected {
@@ -132,7 +138,21 @@ fn diff_events(prev: &Snapshot, new: &Snapshot) -> Vec<Event> {
         }
     }
 
+    // Re-emit the automation card when the setpoint-off status (derived from
+    // the snapshot plus the shared countdown) changes, so the live "turning
+    // off in N min" / "waiting for setpoint" badge stays current.
+    if automation.setpoint_off_status(prev) != automation.setpoint_off_status(new) {
+        out.push(named("automation", render_automation(automation, new)));
+    }
+
     out
+}
+
+/// Render the `#automation` card fragment for an SSE event payload.
+fn render_automation(automation: &AutomationStore, snap: &Snapshot) -> String {
+    let cfg = automation.get();
+    let status = automation.setpoint_off_status(snap);
+    templates::render_automation(&cfg, &status)
 }
 
 /// Build a named SSE event whose data is an HTML fragment.

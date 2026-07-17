@@ -1543,3 +1543,112 @@ async fn setpoint_hold_preset_marks_active() {
     })
     .await;
 }
+
+/// With the setpoint auto-off program enabled but the on-zone still above its
+/// setpoint, the card shows a muted "waiting for setpoint" status line.
+#[tokio::test]
+async fn setpoint_off_status_shows_waiting_badge() {
+    capped(async {
+        let (addr, _mock) = spawn_server().await;
+        // Enable the program.
+        let _ = client()
+            .post(format!("http://{addr}/automation/setpoint-off/toggle"))
+            .form(&[("enabled", "true")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let body = client()
+            .get(format!("http://{addr}/partials/automation"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let setpoint = program_card(&body, "setpoint-off");
+        assert!(
+            setpoint.contains("program-status wait"),
+            "expected a waiting status badge: {setpoint}"
+        );
+        assert!(
+            setpoint.contains("Waiting for setpoint"),
+            "expected waiting copy: {setpoint}"
+        );
+        assert!(
+            setpoint.contains("zones reached"),
+            "expected zone progress copy: {setpoint}"
+        );
+    })
+    .await;
+}
+
+/// When every on-zone has reached its setpoint the card shows the green
+/// countdown badge with the hold time (the engine is not spawned in the test
+/// harness, so the full hold is shown as remaining).
+#[tokio::test]
+async fn setpoint_off_status_shows_countdown_badge() {
+    capped(async {
+        let (addr, mock) = spawn_server().await;
+        // Drive the mock into a minimal at-setpoint state: one on zone in
+        // temperature mode with a reading at/under its Cool setpoint.
+        mock.mutate(|s| {
+            let off_ids = [1u8, 2, 3, 6, 7];
+            for id in off_ids {
+                if let Some(z) = s.zones.get_mut(&id) {
+                    z.power = ZonePowerView::Off;
+                }
+            }
+            let z = s.zones.get_mut(&0).unwrap();
+            z.power = ZonePowerView::On;
+            z.control_mode = ControlModeView::Temperature;
+            z.setpoint = Some(airtouch5::types::Temperature::from_float(23.0));
+            z.sensor = Some(aircon::manager::snapshot::SensorView::Temperature(
+                airtouch5::types::Temperature::from_float(22.0),
+            ));
+            let ac = s.acs.get_mut(&0).unwrap();
+            let st = ac.status.as_mut().unwrap();
+            st.power = Some("On");
+            st.mode = Some("Cool");
+        })
+        .await;
+
+        // Enable the program and fetch the card, polling until the mock has
+        // republished the mutated snapshot and the countdown badge appears.
+        let _ = client()
+            .post(format!("http://{addr}/automation/setpoint-off/toggle"))
+            .form(&[("enabled", "true")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let setpoint = loop {
+            let body = client()
+                .get(format!("http://{addr}/partials/automation"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            let card = program_card(&body, "setpoint-off");
+            if card.contains("program-status ok") {
+                break card.to_string();
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        };
+        assert!(
+            setpoint.contains("All zones at setpoint"),
+            "expected at-setpoint copy: {setpoint}"
+        );
+        assert!(
+            setpoint.contains("15 min"),
+            "expected the 15-minute countdown: {setpoint}"
+        );
+    })
+    .await;
+}

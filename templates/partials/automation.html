@@ -17,6 +17,18 @@
               hx-vals='{"enabled":"{% if config.setpoint_off_enabled %}false{% else %}true{% endif %}"}'
               hx-target="#automation" hx-swap="outerHTML">{% if config.setpoint_off_enabled %}Enabled{% else %}Disabled{% endif %}</button>
     </div>
+    {% if config.setpoint_off_enabled && status.ac_on %}
+      {% if status.at_setpoint %}
+      <div class="program-status ok">
+        All zones at setpoint -- turning the AC off in
+        {% if status.remaining_min == 0 %}<1{% else %}{{ status.remaining_min }}{% endif %} min
+      </div>
+      {% else %}
+      <div class="program-status wait">
+        Waiting for setpoint -- {{ status.satisfied }}/{{ status.on_zones }} zones reached
+      </div>
+      {% endif %}
+    {% endif %}
     <div class="program-param">
       <span class="label">Hold</span>
       <div class="preset-group">

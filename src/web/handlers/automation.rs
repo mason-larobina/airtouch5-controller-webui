@@ -67,7 +67,9 @@ pub async fn set_idle_off_timeout(
 
 fn render(state: &AppState) -> Html<String> {
     let cfg = state.automation.get();
-    Html(templates::render_automation(&cfg))
+    let snap = state.manager.snapshot_rx.borrow().clone();
+    let status = state.automation.setpoint_off_status(&snap);
+    Html(templates::render_automation(&cfg, &status))
 }
 
 fn parse_bool(s: &str) -> Result<bool, AppError> {

@@ -124,10 +124,16 @@ mod duration_secs {
 /// Shared, cloneable handle holding the automation config plus an optional
 /// persistence path. The engine reads via [`AutomationStore::get`]; the web
 /// layer mutates via the typed setters, which persist on every change.
+///
+/// It also holds the live setpoint-off countdown instant (`setpoint_since`),
+/// written by the engine and read by the web layer so the UI can show how long
+/// remains before the AC(s) turn off. This is volatile (not persisted): it is
+/// only meaningful while the engine is running and the condition holds.
 #[derive(Clone)]
 pub struct AutomationStore {
     config: Arc<RwLock<AutomationConfig>>,
     path: Option<PathBuf>,
+    setpoint_since: Arc<RwLock<Option<Instant>>>,
 }
 
 impl AutomationStore {
@@ -137,6 +143,7 @@ impl AutomationStore {
         Self {
             config: Arc::new(RwLock::new(config)),
             path: None,
+            setpoint_since: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -155,12 +162,37 @@ impl AutomationStore {
         Self {
             config: Arc::new(RwLock::new(config)),
             path: Some(path),
+            setpoint_since: Arc::new(RwLock::new(None)),
         }
     }
 
     /// A snapshot copy of the current config.
     pub fn get(&self) -> AutomationConfig {
         self.config.read().expect("config lock poisoned").clone()
+    }
+
+    /// The instant the setpoint-off hold countdown started, if the condition
+    /// is currently holding (None otherwise). Written by the automation
+    /// engine; read by the web layer for the UI countdown badge.
+    pub fn setpoint_since(&self) -> Option<Instant> {
+        *self
+            .setpoint_since
+            .read()
+            .expect("setpoint_since lock poisoned")
+    }
+
+    /// Replace the setpoint-off countdown instant. Engine-only writer.
+    pub fn set_setpoint_since(&self, since: Option<Instant>) {
+        *self
+            .setpoint_since
+            .write()
+            .expect("setpoint_since lock poisoned") = since;
+    }
+
+    /// Compute the live setpoint-off UI status from the current config, the
+    /// shared countdown instant and the given snapshot.
+    pub fn setpoint_off_status(&self, snap: &Snapshot) -> SetpointOffStatus {
+        setpoint_off_status(snap, &self.get(), self.setpoint_since())
     }
 
     /// Apply a mutation and persist it (if a path is set). Returns an error
@@ -177,9 +209,15 @@ impl AutomationStore {
         self.persist(&new)
     }
 
-    /// Enable/disable the setpoint auto-off program.
+    /// Enable/disable the setpoint auto-off program. Disabling also clears
+    /// the live countdown so the UI badge disappears immediately rather than
+    /// waiting for the next engine tick.
     pub fn set_setpoint_off_enabled(&self, enabled: bool) -> Result<(), String> {
-        self.update(|c| c.setpoint_off_enabled = enabled)
+        let res = self.update(|c| c.setpoint_off_enabled = enabled);
+        if res.is_ok() && !enabled {
+            self.set_setpoint_since(None);
+        }
+        res
     }
 
     /// Set the setpoint auto-off hold time (in minutes). Rejects values that
@@ -259,7 +297,6 @@ pub fn spawn_automation(
         let mut rx = manager.snapshot_rx.clone();
         let mut last_fp = control_fingerprint(&rx.borrow());
         let mut last_change = Instant::now();
-        let mut setpoint_since: Option<Instant> = None;
 
         let mut interval = tokio::time::interval(tick_interval);
         // A burst of catch-up ticks after a stall (e.g. the process was
@@ -300,23 +337,29 @@ pub fn spawn_automation(
                     // (1) Setpoint auto-off.
                     if cfg.setpoint_off_enabled {
                         let cond = any_ac_on(&snap) && setpoint_condition(&snap);
-                        match setpoint_since {
-                            Some(since) if cond => {
-                                if since.elapsed() >= cfg.setpoint_off_hold {
-                                    tracing::info!(
-                                        "automation: setpoint auto-off firing (held {:?})",
-                                        since.elapsed()
-                                    );
-                                    turn_off_acs(&manager, &snap).await;
-                                    setpoint_since = None;
-                                }
+                        let since = store.setpoint_since();
+                        let new_since = match (since, cond) {
+                            // Holding: if the hold has elapsed, fire and clear.
+                            (Some(start), true) if start.elapsed() >= cfg.setpoint_off_hold => {
+                                tracing::info!(
+                                    "automation: setpoint auto-off firing (held {:?})",
+                                    start.elapsed()
+                                );
+                                turn_off_acs(&manager, &snap).await;
+                                None
                             }
-                            _ => {
-                                setpoint_since = if cond { Some(Instant::now()) } else { None };
-                            }
+                            // Holding but hold not yet elapsed: keep counting.
+                            (Some(start), true) => Some(start),
+                            // Just became true: start the countdown.
+                            (None, true) => Some(Instant::now()),
+                            // Condition false (or flickered off): reset.
+                            _ => None,
+                        };
+                        if new_since != since {
+                            store.set_setpoint_since(new_since);
                         }
-                    } else {
-                        setpoint_since = None;
+                    } else if store.setpoint_since().is_some() {
+                        store.set_setpoint_since(None);
                     }
 
                     // (2) Idle auto-off.
@@ -356,29 +399,7 @@ fn any_ac_on(snap: &Snapshot) -> bool {
 /// confirmed "at setpoint" so they fail the condition (safe: we do not turn
 /// off). Returns false when there are no on-zones.
 fn setpoint_condition(snap: &Snapshot) -> bool {
-    let mut any_on = false;
-    for z in snap.zones.values().filter(|z| z.is_on()) {
-        any_on = true;
-        // "only active when using temp control for all on-zones": any on-zone
-        // in airflow (or unknown) mode disqualifies the program.
-        if !z.is_temp() {
-            return false;
-        }
-        let Some(reading) = zone_reading_f32(z) else {
-            return false;
-        };
-        let Some(setpoint) = z.setpoint.and_then(snapshot::temp_to_f32) else {
-            return false;
-        };
-        let ac_mode = z
-            .ac_id
-            .and_then(|aid| snap.acs.get(&aid))
-            .and_then(|a| a.mode());
-        if !zone_satisfied(ac_mode, reading, setpoint) {
-            return false;
-        }
-    }
-    any_on
+    setpoint_detail(snap).0
 }
 
 /// A zone's current sensor reading as f32, or None if no sensor / reading
@@ -404,6 +425,87 @@ fn zone_satisfied(ac_mode: Option<&str>, reading: f32, setpoint: f32) -> bool {
         // Auto (plain), Fan, or unknown: require it to be at the setpoint.
         _ => (reading - setpoint).abs() <= SETPOINT_TOLERANCE_C,
     }
+}
+
+/// Live, derived status of the setpoint auto-off program for the UI. It
+/// summarises whether the program is currently counting down to a shutoff
+/// (every on-zone is in temperature mode and has reached its setpoint) and,
+/// if so, how long remains before the engine turns the AC(s) off. The web
+/// layer recomputes this from the snapshot plus the shared `setpoint_since`
+/// countdown handle on every change so the card can show live feedback.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SetpointOffStatus {
+    /// Whether the program is enabled (copied from config for convenience).
+    pub enabled: bool,
+    /// Whether at least one AC is currently On (the program is eligible).
+    pub ac_on: bool,
+    /// Whether every on-zone is in temperature mode and has reached its
+    /// setpoint -- i.e. the hold countdown is (or is about to be) running.
+    pub at_setpoint: bool,
+    /// Number of on-zones currently confirmed at their setpoint.
+    pub satisfied: usize,
+    /// Total number of on-zones.
+    pub on_zones: usize,
+    /// Remaining hold time, in whole minutes rounded up. `0` means the hold
+    /// has elapsed and the engine will fire on its next tick ("<1 min").
+    pub remaining_min: u64,
+}
+
+/// Compute the setpoint auto-off status for the UI from the live snapshot,
+/// the program config and the shared countdown instant. Mirrors the engine's
+/// `cond = any_ac_on && setpoint_condition` so the badge and the engine agree.
+pub fn setpoint_off_status(
+    snap: &Snapshot,
+    cfg: &AutomationConfig,
+    since: Option<Instant>,
+) -> SetpointOffStatus {
+    let (at_setpoint, satisfied, on_zones) = setpoint_detail(snap);
+    let ac_on = any_ac_on(snap);
+    let hold_secs = cfg.setpoint_off_hold.as_secs();
+    let remaining_secs = match (at_setpoint, since) {
+        (true, Some(start)) => hold_secs.saturating_sub(start.elapsed().as_secs()),
+        _ => hold_secs,
+    };
+    let remaining_min = remaining_secs.div_ceil(60);
+    SetpointOffStatus {
+        enabled: cfg.setpoint_off_enabled,
+        ac_on,
+        at_setpoint,
+        satisfied,
+        on_zones,
+        remaining_min,
+    }
+}
+
+/// Same evaluation as [`setpoint_condition`] but also returns the count of
+/// on-zones confirmed at setpoint and the total on-zone count, for the UI
+/// status line. `at_setpoint` is true only when every on-zone qualifies
+/// (and there is at least one on-zone).
+fn setpoint_detail(snap: &Snapshot) -> (bool, usize, usize) {
+    let mut on_zones = 0;
+    let mut satisfied = 0;
+    for z in snap.zones.values().filter(|z| z.is_on()) {
+        on_zones += 1;
+        // A non-temp on-zone disqualifies the program (cannot be "at setpoint").
+        let ok = z.is_temp()
+            && zone_reading_f32(z)
+                .zip(z.setpoint.and_then(snapshot::temp_to_f32))
+                .map(|(reading, setpoint)| {
+                    let ac_mode = z
+                        .ac_id
+                        .and_then(|aid| snap.acs.get(&aid))
+                        .and_then(|a| a.mode());
+                    zone_satisfied(ac_mode, reading, setpoint)
+                })
+                .unwrap_or(false);
+        if ok {
+            satisfied += 1;
+        }
+    }
+    // at_setpoint mirrors setpoint_condition: at least one on-zone and every
+    // on-zone confirmed at its setpoint.
+    let at_setpoint = on_zones > 0 && satisfied == on_zones;
+    (at_setpoint, satisfied, on_zones)
 }
 
 /// A compact, stable string summarising the *control* state of the system --
@@ -742,5 +844,57 @@ mod tests {
         assert!(!c.idle_off_enabled);
         assert_eq!(c.setpoint_off_hold_minutes(), 15);
         assert_eq!(c.idle_off_timeout_minutes(), 30);
+    }
+
+    /// The status reports "waiting" while the on-zone has not reached its
+    /// setpoint, with the full hold time still showing (no countdown active).
+    #[test]
+    fn status_waiting_when_not_at_setpoint() {
+        let s = snap_with_zone(24.0, 23.0); // Cool: 24.0 > 23.5 -> not satisfied.
+        let cfg = AutomationConfig {
+            setpoint_off_enabled: true,
+            ..AutomationConfig::default()
+        };
+        let st = setpoint_off_status(&s, &cfg, None);
+        assert!(st.enabled && st.ac_on);
+        assert!(!st.at_setpoint, "should not be at setpoint");
+        assert_eq!(st.on_zones, 1);
+        assert_eq!(st.satisfied, 0);
+        // No countdown started, so the full hold (15m) is shown.
+        assert_eq!(st.remaining_min, 15);
+    }
+
+    /// Once the condition holds and the countdown is partway through, the
+    /// remaining minutes count down from the hold time.
+    #[test]
+    fn status_countdown_when_at_setpoint() {
+        let s = snap_with_zone(23.0, 23.0); // satisfied.
+        let cfg = AutomationConfig {
+            setpoint_off_enabled: true,
+            setpoint_off_hold: Duration::from_secs(15 * 60),
+            ..AutomationConfig::default()
+        };
+        // Countdown started 5 minutes ago -> 10 of 15 minutes remain.
+        let since = Instant::now().checked_sub(Duration::from_secs(5 * 60));
+        let st = setpoint_off_status(&s, &cfg, since);
+        assert!(st.at_setpoint, "should be at setpoint");
+        assert_eq!(st.remaining_min, 10, "10 minutes should remain");
+    }
+
+    /// When the hold has fully elapsed the remaining minutes clamp to 0
+    /// (the engine fires on its next tick, shown as "<1 min").
+    #[test]
+    fn status_countdown_zero_when_held() {
+        let s = snap_with_zone(23.0, 23.0);
+        let cfg = AutomationConfig {
+            setpoint_off_enabled: true,
+            setpoint_off_hold: Duration::from_secs(15 * 60),
+            ..AutomationConfig::default()
+        };
+        // Countdown started well before the hold period.
+        let since = Instant::now().checked_sub(Duration::from_secs(20 * 60));
+        let st = setpoint_off_status(&s, &cfg, since);
+        assert!(st.at_setpoint);
+        assert_eq!(st.remaining_min, 0, "remaining should clamp to 0");
     }
 }

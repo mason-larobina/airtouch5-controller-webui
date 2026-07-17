@@ -724,3 +724,24 @@ footer a:hover {
   border-color: var(--accent);
   color: var(--text);
 }
+/* Live status line for the setpoint auto-off card: a green badge while the
+   hold countdown is running ("turning off in N min") and a muted badge while
+   waiting for zones to reach their setpoints. Hidden entirely when the
+   program is disabled or no AC is on. */
+.program-status {
+  font-size: 12px;
+  font-family: var(--mono);
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  line-height: 1.4;
+}
+.program-status.ok {
+  background: rgba(67, 181, 129, 0.12);
+  border-color: var(--good);
+  color: var(--good);
+}
+.program-status.wait {
+  background: var(--panel-3);
+  color: var(--muted);
+}
