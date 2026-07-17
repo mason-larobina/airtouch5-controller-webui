@@ -156,6 +156,53 @@ async fn zone_setpoint_requires_sensor() {
 }
 
 #[tokio::test]
+async fn zone_airflow_toggle_enabled_without_sensor() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        // Bedroom (zone 1) is off and has no sensor. Switching to airflow (%)
+        // control must stay possible even when off / sensorless -- the %
+        // button is the one that must NOT be disabled. The Temp button stays
+        // disabled (temperature control needs a sensor).
+        let body = client()
+            .get(format!("http://{addr}/partials/zones/1"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        // The airflow button tag spans from its opening `<button` to `% </button>`;
+        // it must not carry a `disabled` attribute.
+        let airflow_btn = body
+            .split_once("{\"type\":\"airflow\"}")
+            .expect("airflow control-type button missing")
+            .1
+            .split_once("% </button>")
+            .expect("airflow button closing tag missing")
+            .0;
+        assert!(
+            !airflow_btn.contains("disabled"),
+            "airflow (%) button must stay enabled when off/sensorless, got: {body}"
+        );
+
+        // The temperature button, by contrast, must remain disabled.
+        let temp_btn = body
+            .split_once("{\"type\":\"temperature\"}")
+            .expect("temperature control-type button missing")
+            .1
+            .split_once(">Temp</button>")
+            .expect("temp button closing tag missing")
+            .0;
+        assert!(
+            temp_btn.contains("disabled"),
+            "temperature button must be disabled without a sensor, got: {body}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn zone_temperature_mode_stores_setpoint() {
     capped(async {
         let (addr, _m) = spawn_server().await;

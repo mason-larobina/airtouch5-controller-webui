@@ -32,8 +32,7 @@
             hx-post="/zone/{{ zone.id }}/control-type"
             hx-vals='{"type":"airflow"}'
             hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML"
-            {% if zone.is_airflow() %} class="active" aria-pressed="true"{% endif %}
-            {% if !zone.has_sensor %} disabled{% endif %}>% </button>
+            {% if zone.is_airflow() %} class="active" aria-pressed="true"{% endif %}>% </button>
     <button type="button"
             hx-post="/zone/{{ zone.id }}/control-type"
             hx-vals='{"type":"temperature"}'
