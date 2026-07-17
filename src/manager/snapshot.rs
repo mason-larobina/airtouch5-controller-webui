@@ -534,12 +534,6 @@ impl AcView {
     pub fn power_is_away(&self) -> bool {
         matches!(self.power(), Some("AwayOff") | Some("AwayOn"))
     }
-    pub fn power_is_active(&self) -> bool {
-        matches!(
-            self.power(),
-            Some("On") | Some("Sleep") | Some("AwayOff") | Some("AwayOn")
-        )
-    }
     pub fn mode_supported(&self, s: &str) -> bool {
         self.supported_modes.iter().any(|m| *m == s)
     }
@@ -583,26 +577,6 @@ impl AcView {
     pub fn recompute_setpoint_strings(&mut self) {
         if let Some(s) = self.status.as_mut() {
             s.recompute_setpoint_strings();
-        }
-    }
-
-    /// Power badge text, e.g. "On - Cool" or "Off".
-    pub fn power_badge_text(&self) -> String {
-        match (self.power(), self.mode()) {
-            (Some("Off"), _) => "Off".to_string(),
-            (Some(p), Some(m)) if p == "On" => format!("On - {m}"),
-            (Some(p), Some(m)) if p == "Sleep" => format!("Sleep - {m}"),
-            (Some(_), Some(m)) => format!("Away - {m}"),
-            (Some(p), None) => p.to_string(),
-            (None, _) => "Unknown".to_string(),
-        }
-    }
-    /// Power badge CSS class: "on" or "off".
-    pub fn power_badge_class(&self) -> &'static str {
-        if self.power_is_active() {
-            "on"
-        } else {
-            "off"
         }
     }
 

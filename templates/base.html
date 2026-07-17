@@ -80,12 +80,6 @@
     }
     .ac-card .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .ac-card .name { font-size: 18px; font-weight: 600; }
-    .power-badge {
-      font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
-      padding: 4px 10px; border-radius: 999px; text-transform: uppercase;
-    }
-    .power-badge.on  { background: rgba(67,181,129,0.16); color: var(--good); }
-    .power-badge.off { background: rgba(138,147,163,0.16); color: var(--muted); }
     .field .label {
       font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
       color: var(--muted); margin-bottom: 6px;
@@ -132,10 +126,10 @@
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn.step { width: 38px; text-align: center; padding: 7px 0; font-size: 16px; line-height: 1; }
     .btn.on   { background: rgba(67,181,129,0.18); border-color: var(--good); color: var(--good); }
-    .btn.off  { background: rgba(138,147,163,0.14); }
+    .btn.off  { background: rgba(138,147,163,0.18); border-color: var(--muted); color: var(--muted); }
     .btn.turbo{ background: rgba(176,125,240,0.18); border-color: var(--turbo); color: var(--turbo); }
-    .btn.away { background: rgba(240,169,59,0.14); }
-    .btn.sleep{ background: rgba(79,157,255,0.14); }
+    .btn.away { background: rgba(240,169,59,0.18); border-color: var(--warn); color: var(--warn); }
+    .btn.sleep{ background: rgba(79,157,255,0.18); border-color: var(--accent); color: var(--accent); }
     .power-group { display: flex; gap: 6px; }
     .power-group .btn { flex: 1; text-align: center; }
     .timer-status { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--warn); }

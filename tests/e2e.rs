@@ -198,7 +198,8 @@ async fn ac_setpoint_renders_updated_value() {
 async fn ac_power_toggle_turns_off() {
     capped(async {
         let (addr, _m) = spawn_server().await;
-        // AC 0 is On; toggling -> Off.
+        // AC 0 is On; toggling -> Off. The OFF button should now be the
+        // selected (themed) one and the ON button neutral.
         let body = client()
             .post(format!("http://{addr}/ac/0/power"))
             .form(&[("power", "toggle")])
@@ -209,8 +210,16 @@ async fn ac_power_toggle_turns_off() {
             .await
             .unwrap();
         assert!(
-            body.contains("power-badge off"),
-            "expected off badge after toggle, got: {body}"
+            body.contains("class=\"btn off\""),
+            "expected the OFF button to be selected, got: {body}"
+        );
+        assert!(
+            !body.contains("class=\"btn on\""),
+            "ON button should be neutral after toggling off, got: {body}"
+        );
+        assert!(
+            !body.contains("power-badge"),
+            "the top-right power badge should be gone, got: {body}"
         );
     })
     .await;
