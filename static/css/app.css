@@ -350,10 +350,12 @@ h1 {
   overflow: hidden;
 }
 /* Bulk "all zones" control bar at the top of the zone list: a label, a
-   temp / % mode toggle that switches every zone, and a row of preset
-   buttons whose values depend on the selected mode (airflow percentages
-   or temperature setpoints). It lives inside #zones so a bulk POST that
-   re-renders the partial swaps it in along with the zone rows. */
+   The bulk bar also carries ON/OFF buttons that toggle every zone at
+   once. The % / Temp toggle is purely visual: it only swaps which preset
+   row is shown (CSS driven by the `data-bulk-mode` attribute) and never
+   issues a request -- the actual command is sent when a preset is
+   clicked. It lives inside #zones so a bulk POST that re-renders the
+   partial swaps it in along with the zone rows. */
 .bulk-bar {
   display: flex;
   align-items: center;
@@ -374,6 +376,25 @@ h1 {
 .bulk-bar .bulk-mode {
   width: 128px;
   flex: none;
+}
+.bulk-bar .power-group {
+  display: flex;
+  gap: 6px;
+}
+.bulk-bar .power-group .btn {
+  min-width: 48px;
+}
+/* The two preset rows are both rendered; only the one matching the
+   bar's current `data-bulk-mode` is shown. Toggling the % / Temp buttons
+   just flips that attribute (client-side), so no request is needed. */
+.bulk-bar .preset-row {
+  display: none;
+}
+.bulk-bar[data-bulk-mode="airflow"] .preset-row.preset-airflow,
+.bulk-bar[data-bulk-mode="temperature"] .preset-row.preset-temperature {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .bulk-bar .bulk-presets {
   display: flex;

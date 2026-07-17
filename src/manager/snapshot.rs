@@ -179,6 +179,15 @@ pub enum BulkModeView {
 }
 
 impl BulkModeView {
+    /// "airflow" or "temperature" -- the string the bulk bar's
+    /// `data-bulk-mode` attribute carries so the client-side toggle can
+    /// show the matching preset row without a round-trip.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Airflow => "airflow",
+            Self::Temperature => "temperature",
+        }
+    }
     /// True when the bulk bar is in airflow (%) mode.
     pub fn is_airflow(&self) -> bool {
         matches!(self, Self::Airflow)

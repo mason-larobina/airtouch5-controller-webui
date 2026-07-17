@@ -83,38 +83,41 @@ pub async fn setpoint(
     render_current_zone(&state.manager, id)
 }
 
-/// `POST /zones/control-type` -- form field `type = airflow | temperature`.
-/// Switches every zone's control mode. Temperature is applied only to zones
-/// that have a sensor (sensorless zones cannot be temperature-controlled and
-/// are left untouched); airflow is applied to every zone. Re-renders the whole
-/// zones partial so the bulk bar reflects the newly selected mode.
-pub async fn set_all_control_type(
+/// `POST /zones/power` -- form field `power = on | off`.
+///
+/// Turns every zone on or off in one shot. Unlike the per-zone power toggle
+/// (which supports `turbo`/`toggle`), the bulk bar only exposes the two
+/// states that make sense for "all zones": plain on and plain off.
+pub async fn set_all_power(
     State(state): State<AppState>,
     Form(form): Form<Vec<(String, String)>>,
 ) -> Result<Html<String>, AppError> {
-    let t = field(&form, "type");
-    let ct = match t.as_str() {
-        "airflow" => ZoneControlType::Airflow,
-        "temperature" => ZoneControlType::Temperature,
-        other => return Err(AppError::msg(format!("unknown control type: {other:?}"))),
+    let power = field(&form, "power");
+    let power = match power.as_str() {
+        "on" => ZonePower::On,
+        "off" => ZonePower::Off,
+        other => return Err(AppError::msg(format!("unknown power: {other:?}"))),
     };
 
     let snap = state.manager.snapshot_rx.borrow().clone();
     let manager = state.manager.clone();
     for (&id, zone) in &snap.zones {
-        // Skip sensorless zones when switching to temperature: the protocol
-        // rejects it and the per-zone UI disables the Temp button for them.
-        if matches!(ct, ZoneControlType::Temperature) && !zone.has_sensor {
+        // Skip zones that are already in the target state: re-sending the
+        // command would be wasted traffic and, for some consoles, would
+        // reset a Turbo timer the user may have just set.
+        let already = match power {
+            ZonePower::On => zone.is_on(),
+            ZonePower::Off => matches!(zone.power, crate::manager::snapshot::ZonePowerView::Off),
+            _ => false,
+        };
+        if already {
             continue;
         }
-        send_zone(manager.clone(), id, ZoneControlReq::SetControlType(ct)).await?;
+        send_zone(manager.clone(), id, ZoneControlReq::Power(power)).await?;
     }
 
-    let bulk_mode = match ct {
-        ZoneControlType::Airflow => BulkModeView::Airflow,
-        ZoneControlType::Temperature => BulkModeView::Temperature,
-        _ => state.manager.snapshot_rx.borrow().bulk_mode(),
-    };
+    // Preserve the user's last bulk-mode selection on the bar.
+    let bulk_mode = state.manager.snapshot_rx.borrow().bulk_mode();
     let snap = state.manager.snapshot_rx.borrow().clone();
     Ok(Html(templates::render_zones_with_bulk(&snap, bulk_mode)))
 }

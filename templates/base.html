@@ -10,5 +10,28 @@
 </head>
 <body>
   {% block content %}{% endblock %}
+  <script>
+    // The All-zones % / Temp toggle is purely visual: it only swaps which
+    // preset row is visible. No request is sent -- the actual command goes
+    // out when a preset button is clicked. We use delegation so this keeps
+    // working after htmx swaps the #zones partial back in.
+    document.addEventListener("click", function (ev) {
+      var btn = ev.target.closest &&
+        ev.target.closest(".bulk-bar .bulk-mode button[data-mode]");
+      if (!btn || btn.disabled) return;
+      var bar = btn.closest(".bulk-bar");
+      if (!bar) return;
+      bar.setAttribute("data-bulk-mode", btn.getAttribute("data-mode"));
+      bar.querySelectorAll(".bulk-mode button[data-mode]").forEach(function (b) {
+        if (b === btn) {
+          b.classList.add("active");
+          b.setAttribute("aria-pressed", "true");
+        } else {
+          b.classList.remove("active");
+          b.removeAttribute("aria-pressed");
+        }
+      });
+    });
+  </script>
 </body>
 </html>

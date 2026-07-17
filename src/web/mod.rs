@@ -50,7 +50,7 @@ pub fn build_router(manager: ManagerHandle) -> Router {
         .route("/zone/{id}/airflow", post(handlers::zone::airflow))
         .route("/zone/{id}/setpoint", post(handlers::zone::setpoint))
         // Bulk zone controls (apply to every zone)
-        .route("/zones/control-type", post(handlers::zone::set_all_control_type))
+        .route("/zones/power", post(handlers::zone::set_all_power))
         .route("/zones/preset", post(handlers::zone::set_all_preset))
         // AC controls
         .route("/ac/{id}/power", post(handlers::ac::power))
