@@ -3,10 +3,13 @@
 use axum::extract::{Form, Path, State};
 use axum::response::Html;
 
-use airtouch5::types::control::{ZoneControlType, ZoneControlValue, ZonePower};
+use airtouch5::types::Temperature;
+use airtouch5::types::control::ZonePower;
 
 use crate::manager::command::{Command, ZoneControlReq};
-use crate::manager::snapshot::{parse_airflow, parse_setpoint, BulkModeView};
+use crate::manager::snapshot::{
+    BulkModeView, clamp_setpoint, parse_airflow, parse_setpoint, temp_to_f32,
+};
 use crate::templates;
 use crate::web::error::AppError;
 use crate::web::state::AppState;
@@ -30,34 +33,83 @@ pub async fn power(
 }
 
 /// `POST /zone/:id/control-type` -- form field `type = airflow | temperature`.
+///
+/// Rather than sending a control-type-only message (which the console silently
+/// ignores -- the request returns 200 but the zone stays in its old mode, so
+/// the UI never updates), we switch mode by sending an absolute value in the
+/// target mode: `SetAirflow(current_pct)` for airflow, `SetTemperature(t)` for
+/// temperature. This is the same trick the bulk presets use and it is what the
+/// console actually honours -- and, crucially, neither sets the power field, so
+/// switching an OFF zone's mode does not power it on. Temperature control is
+/// rejected (422) for sensorless zones (a protocol constraint).
 pub async fn control_type(
     State(state): State<AppState>,
     Path(id): Path<u8>,
     Form(form): Form<Vec<(String, String)>>,
 ) -> Result<Html<String>, AppError> {
     let t = field(&form, "type");
-    let ct = match t.as_str() {
-        "airflow" => ZoneControlType::Airflow,
-        "temperature" => ZoneControlType::Temperature,
+    let snap = state.manager.snapshot_rx.borrow().clone();
+    let zone = snap
+        .zones
+        .get(&id)
+        .ok_or_else(|| AppError::msg(format!("zone {id} not found")))?;
+    let req = match t.as_str() {
+        "airflow" => ZoneControlReq::SetAirflow(zone.airflow_pct),
+        "temperature" => {
+            if !zone.has_sensor {
+                return Err(AppError::msg(
+                    "zone has no sensor; cannot temperature-control",
+                ));
+            }
+            // Keep the zone's existing setpoint when re-entering temperature
+            // mode; fall back to a neutral 20.0 C when switching over from
+            // airflow mode (which carries no setpoint).
+            let target = zone.setpoint.and_then(temp_to_f32).unwrap_or(20.0);
+            ZoneControlReq::SetTemperature(Temperature::from_float(clamp_setpoint(target)))
+        }
         other => return Err(AppError::msg(format!("unknown control type: {other:?}"))),
     };
-    send_zone(state.manager.clone(), id, ZoneControlReq::SetControlType(ct)).await?;
+    send_zone(state.manager.clone(), id, req).await?;
     render_current_zone(&state.manager, id)
 }
 
 /// `POST /zone/:id/step` -- form field `dir = up | down`.
+///
+/// The +/- stepper steps the zone's value in its current control mode: +/- 5%
+/// airflow (clamped 0-100) or +/- 1.0 C setpoint (clamped 10.0-25.0). We
+/// compute the target server-side and send it as an absolute `SetAirflow` /
+/// `SetTemperature` rather than the protocol's `Increment`/`Decrement` opcode.
+/// The opcode form powers an OFF zone on (the console treats a relative step
+/// as "the user wants to interact, turn it on"), which silently breaks the
+/// "adjust an off zone without waking it" expectation. Absolute values carry no
+/// power field, so an OFF zone stays off while its value still updates -- the
+/// same property the bulk presets rely on.
 pub async fn step(
     State(state): State<AppState>,
     Path(id): Path<u8>,
     Form(form): Form<Vec<(String, String)>>,
 ) -> Result<Html<String>, AppError> {
     let dir = field(&form, "dir");
-    let val = match dir.as_str() {
-        "up" => ZoneControlValue::Increment,
-        "down" => ZoneControlValue::Decrement,
+    let up = match dir.as_str() {
+        "up" => true,
+        "down" => false,
         other => return Err(AppError::msg(format!("unknown dir: {other:?}"))),
     };
-    send_zone(state.manager.clone(), id, ZoneControlReq::StepValue(val)).await?;
+    let snap = state.manager.snapshot_rx.borrow().clone();
+    let zone = snap
+        .zones
+        .get(&id)
+        .ok_or_else(|| AppError::msg(format!("zone {id} not found")))?;
+    let req = if zone.is_temp() {
+        let cur = zone.setpoint.and_then(temp_to_f32).unwrap_or(20.0);
+        let target = clamp_setpoint(if up { cur + 1.0 } else { cur - 1.0 });
+        ZoneControlReq::SetTemperature(Temperature::from_float(target))
+    } else {
+        let cur = zone.airflow_pct as i16;
+        let target = (cur + if up { 5 } else { -5 }).clamp(0, 100) as u8;
+        ZoneControlReq::SetAirflow(target)
+    };
+    send_zone(state.manager.clone(), id, req).await?;
     render_current_zone(&state.manager, id)
 }
 

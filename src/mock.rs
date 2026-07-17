@@ -297,21 +297,32 @@ fn apply_zone(snap: &mut Snapshot, id: u8, req: ZoneControlReq) -> Result<(), St
                 }
             }
         },
-        ZoneControlReq::StepValue(v) => match v {
-            ZoneControlValue::Increment => step_zone(zone, true),
-            ZoneControlValue::Decrement => step_zone(zone, false),
-            ZoneControlValue::Airflow(pct) => {
-                zone.airflow_pct = pct;
-                zone.control_mode = ControlModeView::Airflow;
+        ZoneControlReq::StepValue(v) => {
+            // The real AirTouch 5 console treats a relative Increment/Decrement
+            // as "the user wants to interact" and powers an OFF zone ON before
+            // applying the step. We mirror that here so the mock stays faithful
+            // and a handler that (incorrectly) sends StepValue to an off zone
+            // shows up as the zone turning on. The web handlers avoid this by
+            // sending absolute SetAirflow/SetTemperature values instead.
+            if matches!(zone.power, ZonePowerView::Off) {
+                zone.power = ZonePowerView::On;
             }
-            ZoneControlValue::Temperature(t) => {
-                if !zone.has_sensor {
-                    return Err("zone has no sensor; cannot temperature-control".into());
+            match v {
+                ZoneControlValue::Increment => step_zone(zone, true),
+                ZoneControlValue::Decrement => step_zone(zone, false),
+                ZoneControlValue::Airflow(pct) => {
+                    zone.airflow_pct = pct;
+                    zone.control_mode = ControlModeView::Airflow;
                 }
-                zone.setpoint = Some(t);
-                zone.control_mode = ControlModeView::Temperature;
+                ZoneControlValue::Temperature(t) => {
+                    if !zone.has_sensor {
+                        return Err("zone has no sensor; cannot temperature-control".into());
+                    }
+                    zone.setpoint = Some(t);
+                    zone.control_mode = ControlModeView::Temperature;
+                }
             }
-        },
+        }
         ZoneControlReq::SetAirflow(pct) => {
             zone.airflow_pct = pct;
             zone.control_mode = ControlModeView::Airflow;

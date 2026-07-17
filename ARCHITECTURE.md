@@ -316,6 +316,13 @@ Protocol constraints enforced at the edges:
 - `ZoneControl.control` must be `None` for sensor-less zones. The per-zone Temp
   button is disabled for them, and the bulk "All zones" temperature switch
   skips them.
+- The per-zone `/control-type` and `/step` routes compute an absolute value
+  server-side and send `SetAirflow` / `SetTemperature` rather than
+  `SetControlType` / `StepValue`. The console silently ignores a
+  control-type-only message (200 OK but no mode change -> no UI feedback),
+  and a relative Increment/Decrement powers an OFF zone on. Absolute values
+  carry no power field, so an OFF zone stays off while its value/mode still
+  updates -- the same property the bulk presets rely on.
 
 ## 6. HTTP routes and the htmx/SSE contract
 
@@ -381,8 +388,8 @@ Client wiring (in `index.html`):
 | Method | Path                      | Form field(s)                  | Action                                                     |
 | ------ | ------------------------- | ------------------------------ | ---------------------------------------------------------- |
 | POST   | `/zone/{id}/power`        | `power=on\|off\|turbo\|toggle` | `ZonePower`                                                |
-| POST   | `/zone/{id}/control-type` | `type=airflow\|temperature`    | `ZoneControlType` (temp rejected if `!has_sensor`)         |
-| POST   | `/zone/{id}/step`         | `dir=up\|down`                 | `Increment` / `Decrement` (+5% airflow or +1.0 C setpoint) |
+| POST   | `/zone/{id}/control-type` | `type=airflow\|temperature`    | `SetAirflow(pct)` / `SetTemperature(t)` (temp rejected if `!has_sensor`; absolute value so an off zone is not powered on) |
+| POST   | `/zone/{id}/step`         | `dir=up\|down`                 | `SetAirflow(pct +/-5%)` / `SetTemperature(t +/-1.0 C)` (server-computed absolute value; the relative Increment/Decrement opcode would power an off zone on) |
 | POST   | `/zone/{id}/airflow`      | `pct=0..100`                   | `SetAirflow(pct)`                                          |
 | POST   | `/zone/{id}/setpoint`     | `temp=10.0..25.0`              | `SetTemperature(t)` (also forces Temperature mode)         |
 
@@ -390,7 +397,7 @@ Bulk endpoints apply to every zone and re-render the whole `#zones` partial:
 
 | Method | Path                  | Form field(s)                             | Action                                                           |
 | ------ | --------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
-| POST   | `/zones/control-type` | `type=airflow\|temperature`               | switch every zone (temp skips sensorless zones)                  |
+| POST   | `/zones/power`        | `power=on\|off`                          | turn every zone on or off in one shot (skips zones already in that state) |
 | POST   | `/zones/preset`       | `mode=airflow\|temperature` + `value=...` | set every zone to a preset (% to all, temp to sensor zones only) |
 
 Each single-zone POST sends the command, awaits the reply, and returns the

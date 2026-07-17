@@ -141,6 +141,115 @@ async fn zone_step_decrements_airflow_clamped() {
 }
 
 #[tokio::test]
+async fn zone_step_while_off_keeps_zone_off() {
+    capped(async {
+        let (addr, mock) = spawn_server().await;
+        // Kitchen (zone 2) starts ON at 80% in airflow mode. Turn it OFF at the
+        // wall console, then step it up. The +/- must update the value (80 ->
+        // 85) WITHOUT powering the zone back on. The real console powers an off
+        // zone on for a relative Increment/Decrement, so the handler sends an
+        // absolute SetAirflow (no power field) instead -- the mock mirrors that
+        // console behaviour for StepValue, so this test fails if the handler
+        // ever reverts to sending StepValue.
+        mock.mutate(|s| {
+            if let Some(z) = s.zones.get_mut(&2) {
+                z.power = ZonePowerView::Off;
+            }
+        })
+        .await;
+
+        let _off_body = loop {
+            let b = client()
+                .get(format!("http://{addr}/partials/zones/2"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            if b.contains("zone-row off") {
+                break b;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        };
+
+        let body = client()
+            .post(format!("http://{addr}/zone/2/step"))
+            .form(&[("dir", "up")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(
+            body.contains("zone-row off"),
+            "stepping an off zone must keep it off, got: {body}"
+        );
+        assert!(
+            body.contains("85%"),
+            "stepping an off zone must still update its value (80 -> 85), got: {body}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn zone_control_type_to_temperature_switches_mode() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        // Kitchen (zone 2) has a sensor and starts in airflow (%) mode. Posting
+        // the per-zone control-type toggle to switch to temperature must take
+        // effect: the C button becomes active and the stepper shows a setpoint.
+        // A control-type-only message is silently ignored by the real console
+        // (200 OK but no mode change, so no UI feedback); the handler sends an
+        // absolute SetTemperature instead so the console honours the switch.
+        let body = client()
+            .post(format!("http://{addr}/zone/2/control-type"))
+            .form(&[("type", "temperature")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        // The temperature (C) button in the mode-toggle must be the active one.
+        let temp_btn = body
+            .split_once("{\"type\":\"temperature\"}")
+            .expect("temperature control-type button missing")
+            .1
+            .split_once(">\u{b0}C</button>")
+            .expect("temp button closing tag missing")
+            .0;
+        assert!(
+            temp_btn.contains("class=\"active\""),
+            "temp (C) button must be active after switching to temperature, got: {body}"
+        );
+
+        // The airflow (%) button must NOT be active anymore.
+        let airflow_btn = body
+            .split_once("{\"type\":\"airflow\"}")
+            .expect("airflow control-type button missing")
+            .1
+            .split_once("% </button>")
+            .expect("airflow button closing tag missing")
+            .0;
+        assert!(
+            !airflow_btn.contains("class=\"active\""),
+            "airflow (%) button must be inactive after switching to temperature, got: {body}"
+        );
+
+        // The stepper value must now read a temperature setpoint, not a %.
+        assert!(
+            body.contains(" C</span>"),
+            "stepper must show a temperature setpoint after the switch, got: {body}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn zone_setpoint_requires_sensor() {
     capped(async {
         let (addr, _m) = spawn_server().await;
@@ -197,7 +306,7 @@ async fn zone_airflow_toggle_enabled_without_sensor() {
             .split_once("{\"type\":\"temperature\"}")
             .expect("temperature control-type button missing")
             .1
-            .split_once(">°C</button>")
+            .split_once(">\u{b0}C</button>")
             .expect("temp button closing tag missing")
             .0;
         assert!(
@@ -797,7 +906,7 @@ async fn bulk_temp_button_disabled_without_any_sensors() {
                 .await
                 .unwrap();
             // Wait until the snapshot without sensors has propagated.
-            if !b.contains("°C</button>") || b.contains("disabled") {
+            if !b.contains("\u{b0}C</button>") || b.contains("disabled") {
                 break b;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -807,7 +916,7 @@ async fn bulk_temp_button_disabled_without_any_sensors() {
             .split_once("data-mode=\"temperature\"")
             .expect("bulk temperature toggle missing")
             .1
-            .split_once(">°C</button>")
+            .split_once(">\u{b0}C</button>")
             .expect("bulk temp toggle close missing")
             .0;
         assert!(
