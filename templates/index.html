@@ -6,7 +6,6 @@
 
   <div hx-ext="sse" sse-connect="/events">
     {% include "partials/connection_state.html" %}
-    {% include "partials/system.html" %}
 
     <div class="section-label">
       <h2>AC unit{% if snapshot.console.ac_count > 1 %}s{% endif %}</h2>
@@ -20,10 +19,12 @@
     </div>
     {% include "partials/zones.html" %}
 
-    <p class="note">
-      Live status updates stream over SSE from the AirTouch 5 console. Controls
-      post via htmx; the affected card is re-rendered server-side and swapped in.
-    </p>
+    {% include "partials/system.html" %}
   </div>
+
+  <footer>
+    <a href="https://github.com/mason-larobina/airtouch5-controller-webui"
+       target="_blank" rel="noopener noreferrer">github.com/mason-larobina/airtouch5-controller-webui</a>
+  </footer>
 </div>
 {% endblock %}
