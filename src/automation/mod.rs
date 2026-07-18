@@ -10,7 +10,10 @@
 //!    satisfied, decided by the owning AC's mode), turn the AC(s) off. The
 //!    condition must remain true for a configurable hold period (default 15
 //!    minutes) before the action fires, so a brief dip past the setpoint does
-//!    not trip it.
+//!    not trip it. The program only runs when every On AC is in a heating or
+//!    cooling mode (Heat, Cool, AutoHeat, AutoCool); in any other mode (Auto,
+//!    Dry, Fan) it stays idle and the card shows a "not active for this mode"
+//!    note.
 //! 2. **Idle auto-off** -- if there have been no control-relevant state
 //!    changes for a configurable timeout (15/30/60/120 minutes), turn the
 //!    AC(s) off. "Control-relevant" excludes the live sensor/temperature
@@ -470,13 +473,37 @@ fn any_ac_on(snap: &Snapshot) -> bool {
     snap.acs.values().any(|a| a.power() == Some("On"))
 }
 
-/// The setpoint auto-off condition: every on-zone is in temperature control
-/// mode and has reached its setpoint (per the owning AC's mode). Sensorless
-/// on-zones, or sensor zones whose reading is unavailable, can never be
-/// confirmed "at setpoint" so they fail the condition (safe: we do not turn
-/// off). Returns false when there are no on-zones.
+/// True when the given AC mode is a heating or cooling mode -- the only modes
+/// the setpoint auto-off program runs for. `AutoHeat`/`AutoCool` are the
+/// console's auto-resolved heating/cooling decision; plain `Auto` (undecided),
+/// `Dry`, `Fan`, and unknown are not active.
+fn ac_mode_active(mode: Option<&str>) -> bool {
+    matches!(
+        mode,
+        Some("Heat") | Some("Cool") | Some("AutoHeat") | Some("AutoCool")
+    )
+}
+
+/// True when every On AC is in a heating or cooling mode. The setpoint
+/// auto-off program only runs in this case; otherwise it stays idle and the
+/// card shows a "not active for this mode" note. Vacuously true when no AC is
+/// On (the program is then not eligible for the unrelated reason that nothing
+/// is running).
+fn mode_eligible(snap: &Snapshot) -> bool {
+    snap.acs
+        .values()
+        .filter(|a| a.power() == Some("On"))
+        .all(|a| ac_mode_active(a.mode()))
+}
+
+/// The setpoint auto-off condition: every On AC is in a heating or cooling
+/// mode, and every on-zone is in temperature control mode and has reached its
+/// setpoint (per the owning AC's mode). Sensorless on-zones, or sensor zones
+/// whose reading is unavailable, can never be confirmed "at setpoint" so they
+/// fail the condition (safe: we do not turn off). Returns false when there
+/// are no on-zones.
 fn setpoint_condition(snap: &Snapshot) -> bool {
-    setpoint_detail(snap).0
+    mode_eligible(snap) && setpoint_detail(snap).0
 }
 
 /// A zone's current sensor reading as f32, or None if no sensor / reading
@@ -497,10 +524,12 @@ fn zone_reading_f32(z: &ZoneView) -> Option<f32> {
 /// condition.
 fn zone_satisfied(ac_mode: Option<&str>, reading: f32, setpoint: f32) -> bool {
     match ac_mode {
-        Some("Cool") | Some("AutoCool") | Some("Dry") => reading <= setpoint + SETPOINT_TOLERANCE_C,
+        Some("Cool") | Some("AutoCool") => reading <= setpoint + SETPOINT_TOLERANCE_C,
         Some("Heat") | Some("AutoHeat") => reading >= setpoint - SETPOINT_TOLERANCE_C,
-        // Auto (plain), Fan, or unknown: require it to be at the setpoint.
-        _ => (reading - setpoint).abs() <= SETPOINT_TOLERANCE_C,
+        // Auto (plain), Dry, Fan, or unknown: the setpoint auto-off program
+        // only runs for heating and cooling, so a zone on an AC in any other
+        // mode is never "satisfied" -- the card shows a mode note instead.
+        _ => false,
     }
 }
 
@@ -516,6 +545,10 @@ pub struct SetpointOffStatus {
     pub enabled: bool,
     /// Whether at least one AC is currently On (the program is eligible).
     pub ac_on: bool,
+    /// Whether every On AC is in a heating/cooling mode. When false (and an
+    /// AC is on) the card shows a "not active for this mode" note instead of
+    /// the countdown/waiting status, and the program never fires.
+    pub mode_eligible: bool,
     /// Whether every on-zone is in temperature mode and has reached its
     /// setpoint -- i.e. the hold countdown is (or is about to be) running.
     pub at_setpoint: bool,
@@ -541,6 +574,11 @@ pub fn setpoint_off_status(
 ) -> SetpointOffStatus {
     let (at_setpoint, satisfied, on_zones) = setpoint_detail(snap);
     let ac_on = any_ac_on(snap);
+    let mode_eligible = mode_eligible(snap);
+    // The program only counts down when every On AC is in a heating/cooling
+    // mode; mirror the engine's `setpoint_condition` so the UI and engine
+    // agree and a mode change resets the badge immediately.
+    let at_setpoint = at_setpoint && mode_eligible;
     let target_time = if cfg.setpoint_off_enabled && ac_on && at_setpoint {
         since.and_then(|start| {
             let deadline = start + cfg.setpoint_off_hold;
@@ -559,6 +597,7 @@ pub fn setpoint_off_status(
     SetpointOffStatus {
         enabled: cfg.setpoint_off_enabled,
         ac_on,
+        mode_eligible,
         at_setpoint,
         satisfied,
         on_zones,
@@ -802,6 +841,41 @@ mod tests {
         assert!(!setpoint_condition(&s2), "below setpoint -> not yet heated");
     }
 
+    /// The program is only active for heating/cooling modes. A zone at its
+    /// setpoint on an AC in Fan mode must NOT satisfy the condition (and the
+    /// mode is reported ineligible so the card shows the mode note).
+    #[test]
+    fn setpoint_condition_fan_mode_not_active() {
+        let mut s = snap_with_zone(23.0, 23.0); // would be satisfied in Cool.
+        s.acs.get_mut(&0).unwrap().status.as_mut().unwrap().mode = Some("Fan");
+        assert!(!mode_eligible(&s), "Fan is not a heating/cooling mode");
+        assert!(!setpoint_condition(&s), "Fan mode must not fire");
+    }
+
+    /// Dry and plain Auto are not heating/cooling modes either, even when the
+    /// zone reading is at the setpoint.
+    #[test]
+    fn setpoint_condition_dry_and_auto_not_active() {
+        let mut s = snap_with_zone(23.0, 23.0);
+        s.acs.get_mut(&0).unwrap().status.as_mut().unwrap().mode = Some("Dry");
+        assert!(!mode_eligible(&s));
+        assert!(!setpoint_condition(&s), "Dry mode must not fire");
+        s.acs.get_mut(&0).unwrap().status.as_mut().unwrap().mode = Some("Auto");
+        assert!(!mode_eligible(&s));
+        assert!(!setpoint_condition(&s), "plain Auto mode must not fire");
+    }
+
+    /// AutoHeat/AutoCool (the console's auto-resolved heating/cooling
+    /// directions) ARE active.
+    #[test]
+    fn setpoint_condition_auto_heat_cool_active() {
+        let mut s = snap_with_zone(23.0, 23.0);
+        s.acs.get_mut(&0).unwrap().status.as_mut().unwrap().mode = Some("AutoHeat");
+        assert!(mode_eligible(&s) && setpoint_condition(&s));
+        s.acs.get_mut(&0).unwrap().status.as_mut().unwrap().mode = Some("AutoCool");
+        assert!(mode_eligible(&s) && setpoint_condition(&s));
+    }
+
     #[test]
     fn fingerprint_excludes_sensor_drift() {
         let s1 = snap_with_zone(23.0, 23.0);
@@ -906,6 +980,29 @@ mod tests {
                 .and_then(|a| a.power()),
             Some("On"),
             "AC should still be on before the hold elapses"
+        );
+    }
+
+    /// The engine does not fire when an On AC is in a non-heating/cooling
+    /// mode, even with the zone at its setpoint and the hold elapsed: the
+    /// program only runs for heating and cooling.
+    #[tokio::test]
+    async fn engine_does_not_fire_for_fan_mode() {
+        let mut snap = snap_with_zone(23.0, 23.0); // satisfied in Cool...
+        snap.acs.get_mut(&0).unwrap().status.as_mut().unwrap().mode = Some("Fan");
+        let (manager, _mock) = mock::spawn_mock_controller(snap);
+        let store = AutomationStore::new(AutomationConfig {
+            setpoint_off_enabled: true,
+            setpoint_off_hold: Duration::from_millis(400),
+            idle_off_enabled: false,
+            idle_off_timeout: Duration::from_secs(3600),
+        });
+        let _h = spawn_automation(manager.clone(), store, Duration::from_millis(100));
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(
+            manager.snapshot_rx.borrow().acs.get(&0).and_then(|a| a.power()),
+            Some("On"),
+            "Fan mode must not trigger setpoint auto-off"
         );
     }
 
@@ -1014,6 +1111,25 @@ mod tests {
         assert_eq!(st.on_zones, 1);
         assert_eq!(st.satisfied, 0);
         assert!(st.target_time.is_none(), "no target time while waiting");
+    }
+
+    /// When an On AC is in a non-heating/cooling mode the status reports
+    /// `mode_eligible = false` (so the card shows the "not active for this
+    /// mode" note) and no countdown, even with the zone reading at its
+    /// setpoint.
+    #[test]
+    fn status_mode_ineligible_for_fan_mode() {
+        let mut s = snap_with_zone(23.0, 23.0); // at setpoint in Cool...
+        s.acs.get_mut(&0).unwrap().status.as_mut().unwrap().mode = Some("Fan");
+        let cfg = AutomationConfig {
+            setpoint_off_enabled: true,
+            ..AutomationConfig::default()
+        };
+        let st = setpoint_off_status(&s, &cfg, None);
+        assert!(st.enabled && st.ac_on);
+        assert!(!st.mode_eligible, "Fan mode -> not eligible");
+        assert!(!st.at_setpoint, "ineligible mode -> not at setpoint");
+        assert!(st.target_time.is_none(), "no countdown when ineligible");
     }
 
     /// Once the condition holds and the countdown is running, the status

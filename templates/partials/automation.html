@@ -13,10 +13,15 @@
     </div>
     <div class="program-desc">
       When every on-zone is in temperature mode and has reached its
-      setpoint, turn the AC(s) off after a hold period.
+      setpoint, turn the AC(s) off after a hold period. Only runs in
+      heating and cooling modes.
     </div>
     {% if config.setpoint_off_enabled && status.ac_on %}
-      {% if status.at_setpoint %}
+      {% if !status.mode_eligible %}
+      <div class="program-status note">
+        Not active for this mode -- only works for heating and cooling
+      </div>
+      {% else if status.at_setpoint %}
         {% if let Some(t) = status.target_time %}
         <div class="program-status ok">
           All zones at setpoint -- powering system off at {{ t }}

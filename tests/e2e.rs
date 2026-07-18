@@ -1676,6 +1676,83 @@ async fn setpoint_off_status_shows_countdown_badge() {
     .await;
 }
 
+/// When an On AC is in a non-heating/cooling mode (Fan/Dry/Auto) the setpoint
+/// auto-off card shows the amber "not active for this mode" note instead of
+/// the countdown/waiting status -- even if a zone is sitting at its setpoint.
+#[tokio::test]
+async fn setpoint_off_status_shows_mode_note_when_not_heating_or_cooling() {
+    capped(async {
+        let (addr, mock) = spawn_server().await;
+        // Drive the mock into a state that would otherwise be "at setpoint"
+        // (one on temp zone at its Cool setpoint), then flip the AC to Fan --
+        // a non-heating/cooling mode.
+        mock.mutate(|s| {
+            let off_ids = [1u8, 2, 3, 6, 7];
+            for id in off_ids {
+                if let Some(z) = s.zones.get_mut(&id) {
+                    z.power = ZonePowerView::Off;
+                }
+            }
+            let z = s.zones.get_mut(&0).unwrap();
+            z.power = ZonePowerView::On;
+            z.control_mode = ControlModeView::Temperature;
+            z.setpoint = Some(airtouch5::types::Temperature::from_float(23.0));
+            z.sensor = Some(aircon::manager::snapshot::SensorView::Temperature(
+                airtouch5::types::Temperature::from_float(22.0),
+            ));
+            let ac = s.acs.get_mut(&0).unwrap();
+            let st = ac.status.as_mut().unwrap();
+            st.power = Some("On");
+            st.mode = Some("Fan");
+        })
+        .await;
+
+        let _ = client()
+            .post(format!("http://{addr}/automation/setpoint-off/toggle"))
+            .form(&[("enabled", "true")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        let setpoint = loop {
+            let body = client()
+                .get(format!("http://{addr}/partials/automation"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            let card = program_card(&body, "setpoint-off");
+            if card.contains("program-status note") {
+                break card.to_string();
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        };
+        assert!(
+            setpoint.contains("Not active for this mode"),
+            "expected the mode note: {setpoint}"
+        );
+        assert!(
+            setpoint.contains("heating and cooling"),
+            "expected the heating/cooling hint: {setpoint}"
+        );
+        // No countdown or waiting badge should be shown alongside the note.
+        assert!(
+            !setpoint.contains("program-status ok"),
+            "no countdown badge when mode is ineligible: {setpoint}"
+        );
+        assert!(
+            !setpoint.contains("program-status wait"),
+            "no waiting badge when mode is ineligible: {setpoint}"
+        );
+    })
+    .await;
+}
+
 /// Enabling the idle auto-off program shows the "Powering system off at HH:MM"
 /// status line (the AC is on in the sample snapshot).
 #[tokio::test]

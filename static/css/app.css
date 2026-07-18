@@ -13,6 +13,9 @@
      badge): the theme's --good at low alpha, so it sits lightly on both
      dark and light panels. */
   --good-dim: rgba(67, 181, 129, 0.14);
+  /* Tinted fill for the amber "note" status badge (setpoint auto-off not
+     active for the current mode), mirroring --good-dim. */
+  --warn-dim: rgba(240, 169, 59, 0.14);
   --warn: #f0a93b;
   --bad: #e25b5b;
   --turbo: #b07df0;
@@ -53,6 +56,7 @@
   --accent-dim: #d6e6fc;
   --good: #1e9e62;
   --good-dim: rgba(30, 158, 98, 0.14);
+  --warn-dim: rgba(176, 120, 18, 0.14);
   --warn: #b07812;
   --bad: #cf4040;
   --turbo: #8b53d9;
@@ -108,6 +112,7 @@
   --accent-dim: #000000;
   --good: #000000;
   --good-dim: rgba(0, 0, 0, 0.08);
+  --warn-dim: rgba(0, 0, 0, 0.08);
   --warn: #595959;
   --bad: #000000;
   --turbo: #595959;
@@ -939,9 +944,10 @@ footer a:hover {
   color: var(--sel-text);
 }
 /* Live status line for the setpoint auto-off card: a green badge while the
-   hold countdown is running ("turning off in N min") and a muted badge while
-   waiting for zones to reach their setpoints. Hidden entirely when the
-   program is disabled or no AC is on. */
+   hold countdown is running ("turning off in N min"), a muted badge while
+   waiting for zones to reach their setpoints, or an amber "not active for
+   this mode" note when an On AC is not in a heating/cooling mode. Hidden
+   entirely when the program is disabled or no AC is on. */
 .program-status {
   font-size: 12px;
   font-family: var(--mono);
@@ -958,6 +964,14 @@ footer a:hover {
 .program-status.wait {
   background: var(--panel-3);
   color: var(--muted);
+}
+/* Informational "not active for this mode" note for the setpoint auto-off
+   card: an amber-tinted badge (mirrors the green .ok badge) so it reads as
+   a gentle heads-up rather than an alarm. */
+.program-status.note {
+  background: var(--warn-dim);
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 /* Narrow screens: stack the zone row into two rows and the system card into
