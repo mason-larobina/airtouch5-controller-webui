@@ -11,8 +11,7 @@
               title="Power: {{ zone.power_class() }}"
               hx-post="/zone/{{ zone.id }}/power"
               hx-vals='{"power":"toggle"}'
-              hx-target="#zone-{{ zone.id }}"
-              hx-swap="outerHTML"></button>
+              hx-target="#zone-{{ zone.id }}"></button>
       <span class="name">{{ zone.name }}</span>
       {% if !zone.flags.is_empty() %}
       <div class="zone-flags">
@@ -31,17 +30,17 @@
     <button class="btn step" type="button" aria-label="decrement"
             hx-post="/zone/{{ zone.id }}/step"
             hx-vals='{"dir":"down"}'
-            hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML">-</button>
+            hx-target="#zone-{{ zone.id }}">-</button>
     <button class="val" type="button"
             title="tap to switch % / C control"
             {% if !zone.has_sensor %} disabled{% endif %}
             {% if zone.has_sensor %}
             hx-post="/zone/{{ zone.id }}/control-type/toggle"
-            hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML"
+            hx-target="#zone-{{ zone.id }}"
             {% endif %}>{{ zone.value_display() }}</button>
     <button class="btn step" type="button" aria-label="increment"
             hx-post="/zone/{{ zone.id }}/step"
             hx-vals='{"dir":"up"}'
-            hx-target="#zone-{{ zone.id }}" hx-swap="outerHTML">+</button>
+            hx-target="#zone-{{ zone.id }}">+</button>
   </div>
 </div>

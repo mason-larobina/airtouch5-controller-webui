@@ -8,6 +8,7 @@ use askama::Template;
 
 use crate::automation::{AutomationConfig, IdleOffStatus, SetpointOffStatus};
 use crate::manager::snapshot::{AcView, BulkModeView, Snapshot, ZoneView};
+use crate::web::theme::{THEMES, Theme};
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -17,6 +18,10 @@ pub struct IndexTemplate<'a> {
     pub config: &'a AutomationConfig,
     pub status: &'a SetpointOffStatus,
     pub idle: &'a IdleOffStatus,
+    /// The active theme (from the `theme` cookie) and every available theme,
+    /// for <html data-theme> and the footer theme selector.
+    pub theme: &'static Theme,
+    pub themes: &'static [Theme],
 }
 
 pub fn render_index(
@@ -24,6 +29,7 @@ pub fn render_index(
     config: &AutomationConfig,
     status: &SetpointOffStatus,
     idle: &IdleOffStatus,
+    theme: &'static Theme,
 ) -> String {
     IndexTemplate {
         snapshot,
@@ -31,6 +37,8 @@ pub fn render_index(
         config,
         status,
         idle,
+        theme,
+        themes: THEMES,
     }
     .render()
     .unwrap_or_default()
@@ -127,7 +135,11 @@ pub fn render_automation(
     status: &SetpointOffStatus,
     idle: &IdleOffStatus,
 ) -> String {
-    AutomationTemplate { config, status, idle }
-        .render()
-        .unwrap_or_default()
+    AutomationTemplate {
+        config,
+        status,
+        idle,
+    }
+    .render()
+    .unwrap_or_default()
 }

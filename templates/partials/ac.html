@@ -10,18 +10,18 @@
   <div class="field">
     <div class="label">Power</div>
     <div class="power-group">
-      <button class="btn{% if ac.power_eq("On") %} selected{% endif %}"
+      <button type="button" class="btn{% if ac.power_eq("On") %} selected{% endif %}"
               hx-post="/ac/{{ ac.id }}/power" hx-vals='{"power":"on"}'
-              hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML">ON</button>
-      <button class="btn{% if ac.power_eq("Off") %} selected{% endif %}"
+              hx-target="#ac-{{ ac.id }}">ON</button>
+      <button type="button" class="btn{% if ac.power_eq("Off") %} selected{% endif %}"
               hx-post="/ac/{{ ac.id }}/power" hx-vals='{"power":"off"}'
-              hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML">OFF</button>
-      <button class="btn{% if ac.power_is_away() %} selected{% endif %}"
+              hx-target="#ac-{{ ac.id }}">OFF</button>
+      <button type="button" class="btn{% if ac.power_is_away() %} selected{% endif %}"
               hx-post="/ac/{{ ac.id }}/power" hx-vals='{"power":"away"}'
-              hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML">Away</button>
-      <button class="btn{% if ac.power_eq("Sleep") %} selected{% endif %}"
+              hx-target="#ac-{{ ac.id }}">Away</button>
+      <button type="button" class="btn{% if ac.power_eq("Sleep") %} selected{% endif %}"
               hx-post="/ac/{{ ac.id }}/power" hx-vals='{"power":"sleep"}'
-              hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML">Sleep</button>
+              hx-target="#ac-{{ ac.id }}">Sleep</button>
     </div>
   </div>
 
@@ -29,11 +29,11 @@
   <div class="field">
     <div class="label">Mode</div>
     <div class="segmented" role="group" aria-label="ac mode">
-      <button hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"auto"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.mode_is_auto() %} class="active"{% endif %}{% if !ac.mode_supported("Auto") %} disabled{% endif %}>Auto</button>
-      <button hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"heat"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.mode_eq("Heat") %} class="active"{% endif %}{% if !ac.mode_supported("Heat") %} disabled{% endif %}>Heat</button>
-      <button hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"dry"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.mode_eq("Dry") %} class="active"{% endif %}{% if !ac.mode_supported("Dry") %} disabled{% endif %}>Dry</button>
-      <button hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"fan"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.mode_eq("Fan") %} class="active"{% endif %}{% if !ac.mode_supported("Fan") %} disabled{% endif %}>Fan</button>
-      <button hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"cool"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.mode_eq("Cool") %} class="active"{% endif %}{% if !ac.mode_supported("Cool") %} disabled{% endif %}>Cool</button>
+      <button type="button" hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"auto"}' hx-target="#ac-{{ ac.id }}"{% if ac.mode_is_auto() %} class="active"{% endif %}{% if !ac.mode_supported("Auto") %} disabled{% endif %}>Auto</button>
+      <button type="button" hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"heat"}' hx-target="#ac-{{ ac.id }}"{% if ac.mode_eq("Heat") %} class="active"{% endif %}{% if !ac.mode_supported("Heat") %} disabled{% endif %}>Heat</button>
+      <button type="button" hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"dry"}' hx-target="#ac-{{ ac.id }}"{% if ac.mode_eq("Dry") %} class="active"{% endif %}{% if !ac.mode_supported("Dry") %} disabled{% endif %}>Dry</button>
+      <button type="button" hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"fan"}' hx-target="#ac-{{ ac.id }}"{% if ac.mode_eq("Fan") %} class="active"{% endif %}{% if !ac.mode_supported("Fan") %} disabled{% endif %}>Fan</button>
+      <button type="button" hx-post="/ac/{{ ac.id }}/mode" hx-vals='{"mode":"cool"}' hx-target="#ac-{{ ac.id }}"{% if ac.mode_eq("Cool") %} class="active"{% endif %}{% if !ac.mode_supported("Cool") %} disabled{% endif %}>Cool</button>
     </div>
   </div>
 
@@ -42,30 +42,30 @@
     <div class="label">Fan speed</div>
     <div class="fan-row">
       <div class="segmented compact" role="group" aria-label="fan speed">
-        <button hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"auto"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.fan_eq("Auto") %} class="active"{% endif %}{% if !ac.fan_supported("Auto") %} disabled{% endif %}>Auto</button>
+        <button type="button" hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"auto"}' hx-target="#ac-{{ ac.id }}"{% if ac.fan_eq("Auto") %} class="active"{% endif %}{% if !ac.fan_supported("Auto") %} disabled{% endif %}>Auto</button>
         {% if ac.fan_supported("Quiet") %}
-        <button hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"quiet"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.fan_eq("Quiet") %} class="active"{% endif %}>Quiet</button>
+        <button type="button" hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"quiet"}' hx-target="#ac-{{ ac.id }}"{% if ac.fan_eq("Quiet") %} class="active"{% endif %}>Quiet</button>
         {% endif %}
         {% if ac.fan_supported("Low") %}
-        <button hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"low"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.fan_eq("Low") %} class="active"{% endif %}>Low</button>
+        <button type="button" hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"low"}' hx-target="#ac-{{ ac.id }}"{% if ac.fan_eq("Low") %} class="active"{% endif %}>Low</button>
         {% endif %}
         {% if ac.fan_supported("Medium") %}
-        <button hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"medium"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.fan_eq("Med") %} class="active"{% endif %}>Med</button>
+        <button type="button" hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"medium"}' hx-target="#ac-{{ ac.id }}"{% if ac.fan_eq("Med") %} class="active"{% endif %}>Med</button>
         {% endif %}
         {% if ac.fan_supported("High") %}
-        <button hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"high"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.fan_eq("High") %} class="active"{% endif %}>High</button>
+        <button type="button" hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"high"}' hx-target="#ac-{{ ac.id }}"{% if ac.fan_eq("High") %} class="active"{% endif %}>High</button>
         {% endif %}
         {% if ac.fan_supported("Powerful") %}
-        <button hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"powerful"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.fan_eq("Power") %} class="active"{% endif %}>Power</button>
+        <button type="button" hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"powerful"}' hx-target="#ac-{{ ac.id }}"{% if ac.fan_eq("Power") %} class="active"{% endif %}>Power</button>
         {% endif %}
         {% if ac.fan_supported("Turbo") %}
-        <button hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"turbo"}' hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"{% if ac.fan_eq("Turbo") %} class="active"{% endif %}>Turbo</button>
+        <button type="button" hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"turbo"}' hx-target="#ac-{{ ac.id }}"{% if ac.fan_eq("Turbo") %} class="active"{% endif %}>Turbo</button>
         {% endif %}
       </div>
-      <button class="int-auto{% if ac.fan_int_auto() %} active{% endif %}"
+      <button type="button" class="int-auto{% if ac.fan_int_auto() %} active{% endif %}"
               title="IntelligentAuto"
               hx-post="/ac/{{ ac.id }}/fan" hx-vals='{"fan":"intelligentauto"}'
-              hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML">Int Auto</button>
+              hx-target="#ac-{{ ac.id }}">Int Auto</button>
     </div>
   </div>
 
@@ -78,14 +78,14 @@
         <span class="v">{{ ac.temp_display() }}</span>
       </div>
       <div class="stepper">
-        <button class="btn step" aria-label="decrement setpoint"
+        <button type="button" class="btn step" aria-label="decrement setpoint"
                 hx-post="/ac/{{ ac.id }}/setpoint" hx-vals='{"temp":"{{ ac.setpoint_down() }}"}'
-                hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"
+                hx-target="#ac-{{ ac.id }}"
                 {% if ac.setpoint_down().is_empty() %}disabled{% endif %}>-</button>
         <span class="val">{{ ac.setpoint_display() }}</span>
-        <button class="btn step" aria-label="increment setpoint"
+        <button type="button" class="btn step" aria-label="increment setpoint"
                 hx-post="/ac/{{ ac.id }}/setpoint" hx-vals='{"temp":"{{ ac.setpoint_up() }}"}'
-                hx-target="#ac-{{ ac.id }}" hx-swap="outerHTML"
+                hx-target="#ac-{{ ac.id }}"
                 {% if ac.setpoint_up().is_empty() %}disabled{% endif %}>+</button>
       </div>
     </div>

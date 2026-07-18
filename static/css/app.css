@@ -9,6 +9,10 @@
   --accent: #4f9dff;
   --accent-dim: #2c4a6b;
   --good: #43b581;
+  /* Tinted fill for "on/enabled" green states (program toggle, status
+     badge): the theme's --good at low alpha, so it sits lightly on both
+     dark and light panels. */
+  --good-dim: rgba(67, 181, 129, 0.14);
   --warn: #f0a93b;
   --bad: #e25b5b;
   --turbo: #b07df0;
@@ -21,6 +25,81 @@
   --mono:
     ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas,
     monospace;
+}
+/* Color themes. The plain :root block above is the default theme (midnight);
+   every other theme is a custom-property override selected by the data-theme
+   attribute on <html>, which the server renders from the `theme` cookie (so
+   there is no flash of the wrong theme) and the footer theme selector swaps
+   live. Because overrides cascade by attribute specificity, each block only
+   needs to redefine the tokens it changes -- but redefining the full palette
+   keeps each theme self-contained and easy to tune. Keep the theme names and
+   --bg values in sync with THEMES in src/web/theme.rs (the server uses --bg
+   for <meta name="theme-color">). */
+:root[data-theme="daylight"] {
+  --bg: #eef1f5;
+  --panel: #ffffff;
+  --panel-2: #f1f4f8;
+  --panel-3: #e6ebf2;
+  --border: #c7d0dc;
+  --text: #1c2433;
+  --muted: #5a6675;
+  --accent: #1c6fe0;
+  --accent-dim: #d6e6fc;
+  --good: #1e9e62;
+  --good-dim: rgba(30, 158, 98, 0.14);
+  --warn: #b07812;
+  --bad: #cf4040;
+  --turbo: #8b53d9;
+  --shadow: 0 1px 3px rgba(25, 35, 55, 0.18);
+}
+:root[data-theme="ocean"] {
+  --bg: #081420;
+  --panel: #0e1f2e;
+  --panel-2: #132739;
+  --panel-3: #193349;
+  --border: #22465f;
+  --text: #e3f1f9;
+  --muted: #7f9cae;
+  --accent: #2fd4c4;
+  --accent-dim: #11424a;
+  --good: #43b581;
+  --good-dim: rgba(67, 181, 129, 0.14);
+  --warn: #f0a93b;
+  --bad: #e25b5b;
+  --turbo: #b07df0;
+}
+:root[data-theme="ember"] {
+  --bg: #171210;
+  --panel: #201a17;
+  --panel-2: #29221e;
+  --panel-3: #332a25;
+  --border: #463931;
+  --text: #f4eae1;
+  --muted: #ab9a8e;
+  --accent: #ff9e4f;
+  --accent-dim: #54371f;
+  --good: #43b581;
+  --good-dim: rgba(67, 181, 129, 0.14);
+  --warn: #f0a93b;
+  --bad: #e25b5b;
+  --turbo: #c490f0;
+}
+:root[data-theme="contrast"] {
+  --bg: #000000;
+  --panel: #000000;
+  --panel-2: #101010;
+  --panel-3: #1a1a1a;
+  --border: #f2f2f2;
+  --text: #ffffff;
+  --muted: #d6d6d6;
+  --accent: #ffe600;
+  --accent-dim: #3d3800;
+  --good: #00e676;
+  --good-dim: rgba(0, 230, 118, 0.18);
+  --warn: #ffb300;
+  --bad: #ff5252;
+  --turbo: #e08cff;
+  --shadow: none;
 }
 * {
   box-sizing: border-box;
@@ -142,6 +221,11 @@ h1 {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--muted);
+}
+#acs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .ac-card {
   background: var(--panel);
@@ -593,6 +677,88 @@ footer {
   border-top: 1px dashed var(--border);
   text-align: center;
 }
+/* Theme selector: a centered row of pill buttons, one per available theme.
+   Clicking applies the theme instantly (data-theme on <html>, handled by the
+   delegated click handler in base.html) and posts to /theme to persist the
+   choice in a cookie; the active button gets the standard selected fill. */
+.theme-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.theme-selector > .label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.theme-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.theme-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 14px 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Each button carries a small two-tone dot previewing its theme (background
+   + accent). The hexes duplicate the palette values of the theme blocks at
+   the top of this file. */
+.theme-btn::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    135deg,
+    var(--dot-bg) 0 50%,
+    var(--dot-accent) 50% 100%
+  );
+}
+.theme-btn[data-set-theme="midnight"] {
+  --dot-bg: #0f1115;
+  --dot-accent: #4f9dff;
+}
+.theme-btn[data-set-theme="daylight"] {
+  --dot-bg: #eef1f5;
+  --dot-accent: #1c6fe0;
+}
+.theme-btn[data-set-theme="ocean"] {
+  --dot-bg: #081420;
+  --dot-accent: #2fd4c4;
+}
+.theme-btn[data-set-theme="ember"] {
+  --dot-bg: #171210;
+  --dot-accent: #ff9e4f;
+}
+.theme-btn[data-set-theme="contrast"] {
+  --dot-bg: #000000;
+  --dot-accent: #ffe600;
+}
+.theme-btn:hover:not(.active) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.theme-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text);
+}
 footer a {
   font-family: var(--mono);
   font-size: 12px;
@@ -602,31 +768,6 @@ footer a {
 footer a:hover {
   color: var(--accent);
 }
-@media (max-width: 560px) {
-  #system {
-    grid-template-columns: 1fr;
-  }
-  .zone-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "name temp" "controls controls";
-    row-gap: 8px;
-  }
-  .zone-name {
-    grid-area: name;
-  }
-  .zone-temp {
-    grid-area: temp;
-  }
-  .zone-controls {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 8px;
-    grid-area: controls;
-  }
-}
-
 /* Automation programs section (below the zones list). Two program cards,
    each with a name/description, an On/Off enable toggle, and a row of
    parameter preset buttons (hold time / idle timeout). */
@@ -664,8 +805,12 @@ footer a:hover {
   color: var(--muted);
   line-height: 1.45;
 }
-/* Single Enabled/Disabled toggle button. Green when the program is on,
-   muted when it is off; clicking it flips the state. */
+/* Single Enabled/Disabled toggle button. Enabled gets a tinted "on"
+   treatment (the theme's --good-dim fill with a --good border and full
+   text color -- the same dim-fill + accent-border pattern as the other
+   selected controls) so it reads as on without a heavy solid-green slab,
+   which felt too dark on the light themes. Disabled is muted. Clicking
+   flips the state. */
 .program-toggle {
   appearance: none;
   border: 1px solid var(--border);
@@ -681,12 +826,9 @@ footer a:hover {
   flex: none;
 }
 .program-toggle.on {
-  background: var(--good);
+  background: var(--good-dim);
   border-color: var(--good);
-  color: #07140d;
-}
-.program-toggle.on:hover {
-  filter: brightness(1.05);
+  color: var(--text);
 }
 .program-toggle.off {
   background: var(--panel-3);
@@ -737,11 +879,38 @@ footer a:hover {
   line-height: 1.4;
 }
 .program-status.ok {
-  background: rgba(67, 181, 129, 0.12);
+  background: var(--good-dim);
   border-color: var(--good);
   color: var(--good);
 }
 .program-status.wait {
   background: var(--panel-3);
   color: var(--muted);
+}
+
+/* Narrow screens: stack the zone row into two rows and the system card into
+   one column. Kept at the end of the file so it wins over the rules above. */
+@media (max-width: 560px) {
+  #system {
+    grid-template-columns: 1fr;
+  }
+  .zone-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name temp" "controls controls";
+    row-gap: 8px;
+  }
+  .zone-name {
+    grid-area: name;
+  }
+  .zone-temp {
+    grid-area: temp;
+  }
+  .zone-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    grid-area: controls;
+  }
 }

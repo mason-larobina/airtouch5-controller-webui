@@ -1,21 +1,57 @@
 //! Page + partial handlers: `GET /` and `GET /partials/*`.
 
-use axum::extract::{Path, State};
-use axum::response::Html;
+use axum::extract::{Form, Path, State};
+use axum::http::header::SET_COOKIE;
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::response::{Html, IntoResponse, Response};
 
 use crate::manager::command::Command;
 use crate::templates;
 use crate::web::error::AppError;
 use crate::web::state::AppState;
+use crate::web::theme;
 
 /// `GET /` -- full page shell.
-pub async fn index(State(state): State<AppState>) -> Result<Html<String>, AppError> {
+pub async fn index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Html<String>, AppError> {
     let snap = state.manager.snapshot_rx.borrow().clone();
     let cfg = state.automation.get();
     state.automation.ensure_setpoint_countdown(&snap);
     let status = state.automation.setpoint_off_status(&snap);
     let idle = state.automation.idle_off_status(&snap);
-    Ok(Html(templates::render_index(&snap, &cfg, &status, &idle)))
+    Ok(Html(templates::render_index(
+        &snap,
+        &cfg,
+        &status,
+        &idle,
+        theme::from_headers(&headers),
+    )))
+}
+
+/// `POST /theme` -- persist the selected color theme in a cookie.
+///
+/// The response body is empty: the client has already applied the theme
+/// itself (the selector sets `data-theme` on <html> and uses
+/// `hx-swap="none"`), so there is nothing to swap. Unknown theme names are
+/// sanitized to the default so the cookie can never hold an invalid value.
+pub async fn set_theme(Form(form): Form<Vec<(String, String)>>) -> Response {
+    let name = form
+        .iter()
+        .find(|(k, _)| k == "name")
+        .map(|(_, v)| v.as_str())
+        .unwrap_or("");
+    let theme = theme::lookup(name);
+    let cookie = format!(
+        "theme={}; Path=/; Max-Age=31536000; SameSite=Lax",
+        theme.name
+    );
+    (
+        StatusCode::OK,
+        [(SET_COOKIE, HeaderValue::from_str(&cookie).unwrap())],
+    )
+        .into_response()
 }
 
 /// `GET /partials/system`.

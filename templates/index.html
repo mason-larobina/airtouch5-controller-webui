@@ -2,32 +2,41 @@
 
 {% block content %}
 <div class="page">
-  <h1>aircon &middot; AirTouch 5</h1>
+  <header class="page-head">
+    <h1>aircon &middot; AirTouch 5</h1>
+  </header>
 
-  <div hx-ext="sse" sse-connect="/events">
+  <main hx-ext="sse" sse-connect="/events">
     {% include "partials/connection_state.html" %}
 
-    <div class="section-label">
-      <h2>AC unit{% if snapshot.console.ac_count > 1 %}s{% endif %}</h2>
-      <span class="count">{{ snapshot.console.ac_count }} system{% if snapshot.console.ac_count != 1 %}s{% endif %}</span>
-    </div>
-    {% include "partials/acs.html" %}
+    <section aria-labelledby="acs-label">
+      <div class="section-label">
+        <h2 id="acs-label">AC unit{% if snapshot.console.ac_count > 1 %}s{% endif %}</h2>
+        <span class="count">{{ snapshot.console.ac_count }} system{% if snapshot.console.ac_count != 1 %}s{% endif %}</span>
+      </div>
+      {% include "partials/acs.html" %}
+    </section>
 
-    <div class="section-label">
-      <h2>Zones</h2>
-      <span class="count">{{ snapshot.console.zone_count }} zone{% if snapshot.console.zone_count != 1 %}s{% endif %}</span>
-    </div>
-    {% include "partials/zones.html" %}
+    <section aria-labelledby="zones-label">
+      <div class="section-label">
+        <h2 id="zones-label">Zones</h2>
+        <span class="count">{{ snapshot.console.zone_count }} zone{% if snapshot.console.zone_count != 1 %}s{% endif %}</span>
+      </div>
+      {% include "partials/zones.html" %}
+    </section>
 
-    <div class="section-label">
-      <h2>Automation</h2>
-    </div>
-    {% include "partials/automation.html" %}
+    <section aria-labelledby="automation-label">
+      <div class="section-label">
+        <h2 id="automation-label">Automation</h2>
+      </div>
+      {% include "partials/automation.html" %}
+    </section>
 
     {% include "partials/system.html" %}
-  </div>
+  </main>
 
   <footer>
+    {% include "partials/theme_selector.html" %}
     <a href="https://github.com/mason-larobina/airtouch5-controller-webui"
        target="_blank" rel="noopener noreferrer">github.com/mason-larobina/airtouch5-controller-webui</a>
   </footer>

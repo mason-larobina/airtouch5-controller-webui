@@ -1755,7 +1755,6 @@ fn target_time(card: &str) -> Option<String> {
     }
 }
 
-
 /// The SSE initial full render emits an `automation` event carrying the idle
 /// auto-off "Powering system off at HH:MM" status line once the program is
 /// enabled, so a freshly-connected browser shows the target time live.
@@ -1806,6 +1805,104 @@ async fn sse_initial_render_emits_idle_status() {
         assert!(
             saw_idle_status,
             "initial SSE render should include the idle target-time status"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn theme_cookie_round_trip() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+
+        // No cookie -> the default theme (midnight) is rendered.
+        let body = client()
+            .get(format!("http://{addr}/"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(
+            body.contains(r#"<html lang="en" data-theme="midnight">"#),
+            "default data-theme missing"
+        );
+        assert!(
+            body.contains(r##"<meta name="theme-color" content="#0f1115">"##),
+            "default theme-color missing"
+        );
+        // Every theme gets a selector button.
+        for name in ["midnight", "daylight", "ocean", "ember", "contrast"] {
+            assert!(
+                body.contains(&format!(r#"data-set-theme="{name}""#)),
+                "selector button for {name} missing"
+            );
+        }
+
+        // Selecting a theme sets a long-lived cookie; the body stays empty
+        // (the client applies the theme itself, hx-swap="none").
+        let resp = client()
+            .post(format!("http://{addr}/theme"))
+            .form(&[("name", "ocean")])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let set_cookie = resp
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(set_cookie.contains("theme=ocean"), "cookie: {set_cookie}");
+        assert!(
+            set_cookie.contains("Max-Age=31536000"),
+            "cookie: {set_cookie}"
+        );
+        assert!(resp.text().await.unwrap().is_empty());
+
+        // The index then renders that theme from the cookie.
+        let body = client()
+            .get(format!("http://{addr}/"))
+            .header("cookie", "theme=ember")
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(body.contains(r#"data-theme="ember""#));
+        assert!(body.contains(r##"content="#171210""##));
+
+        // Unknown values (stale cookie, bogus POST) fall back to the default.
+        let body = client()
+            .get(format!("http://{addr}/"))
+            .header("cookie", "theme=bogus")
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(body.contains(r#"data-theme="midnight""#));
+        let resp = client()
+            .post(format!("http://{addr}/theme"))
+            .form(&[("name", "bogus")])
+            .send()
+            .await
+            .unwrap();
+        let set_cookie = resp
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            set_cookie.contains("theme=midnight"),
+            "bogus theme should sanitize to default, got: {set_cookie}"
         );
     })
     .await;

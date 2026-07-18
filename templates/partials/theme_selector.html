@@ -1,0 +1,15 @@
+<nav class="theme-selector" aria-label="Color theme">
+  <span class="label">Theme</span>
+  <div class="theme-btns" role="group">
+    {% for t in themes %}
+    <button type="button"
+            class="theme-btn{% if t.name == theme.name %} active{% endif %}"
+            data-set-theme="{{ t.name }}"
+            data-theme-bg="{{ t.bg }}"
+            title="Switch to the {{ t.label }} theme"
+            {% if t.name == theme.name %}aria-pressed="true"{% endif %}
+            hx-post="/theme" hx-vals='{"name":"{{ t.name }}"}'
+            hx-swap="none">{{ t.label }}</button>
+    {% endfor %}
+  </div>
+</nav>

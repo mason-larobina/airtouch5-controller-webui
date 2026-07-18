@@ -5,6 +5,7 @@ pub mod handlers;
 pub mod log;
 pub mod sse;
 pub mod state;
+pub mod theme;
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -45,6 +46,7 @@ pub fn build_router(manager: ManagerHandle, automation: AutomationStore) -> Rout
         .route("/partials/zones", get(handlers::pages::partial_zones))
         .route("/partials/zones/{id}", get(handlers::pages::partial_zone))
         .route("/refresh", post(handlers::pages::refresh))
+        .route("/theme", post(handlers::pages::set_theme))
         // SSE
         .route("/events", get(sse::sse_events))
         // Zone controls
