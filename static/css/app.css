@@ -207,18 +207,30 @@ h1 {
   box-shadow: var(--shadow);
   padding: 14px 16px;
   margin-top: 24px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Header row mirroring the zone row: the console name (a long title that
+   ellipsises on overflow) on the left, the refresh button pinned right. */
+#system .head {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 /* Card-title style, shared with .ac-card .name and .program-name so every
    section's card header reads the same: 16px, weight 600, default text
-   color (no accent), normal case. The console name previously used the
-   accent color and a different size; both are dropped here for parity. */
+   color (no accent), normal case. min-width: 0 + nowrap let the title
+   ellipsis when it is too long for the row. */
 #system .title {
   font-size: 16px;
   font-weight: 600;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 #system .meta {
   display: flex;
@@ -227,7 +239,6 @@ h1 {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--muted);
-  margin-top: 4px;
 }
 #system .meta span {
   white-space: nowrap;
@@ -838,20 +849,23 @@ footer a:hover {
 }
 .program-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
-.program-info {
-  min-width: 0;
-}
-/* Shares the card-title style with #system .title and .ac-card .name. */
+/* Shares the card-title style with #system .title and .ac-card .name.
+   min-width: 0 + nowrap let a long program name ellipsis inside the flex
+   head row, matching the zone name. */
 .program-name {
   font-size: 16px;
   font-weight: 600;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .program-desc {
-  margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
   line-height: 1.45;
@@ -942,9 +956,6 @@ footer a:hover {
 /* Narrow screens: stack the zone row into two rows and the system card into
    one column. Kept at the end of the file so it wins over the rules above. */
 @media (max-width: 560px) {
-  #system {
-    grid-template-columns: 1fr;
-  }
   .zone-row {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "name temp" "controls controls";

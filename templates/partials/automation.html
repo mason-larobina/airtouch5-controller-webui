@@ -3,19 +3,17 @@
   <!-- Setpoint auto-off -->
   <div class="program-card" data-program="setpoint-off">
     <div class="program-head">
-      <div class="program-info">
-        <div class="program-name">Setpoint auto-off</div>
-        <div class="program-desc">
-          When every on-zone is in temperature mode and has reached its
-          setpoint, turn the AC(s) off after a hold period.
-        </div>
-      </div>
+      <div class="program-name">Setpoint auto-off</div>
       <button type="button"
               class="program-toggle{% if config.setpoint_off_enabled %} on{% else %} off{% endif %}"
               aria-pressed="{% if config.setpoint_off_enabled %}true{% else %}false{% endif %}"
               hx-post="/automation/setpoint-off/toggle"
               hx-vals='{"enabled":"{% if config.setpoint_off_enabled %}false{% else %}true{% endif %}"}'
               hx-target="#automation">{% if config.setpoint_off_enabled %}Enabled{% else %}Disabled{% endif %}</button>
+    </div>
+    <div class="program-desc">
+      When every on-zone is in temperature mode and has reached its
+      setpoint, turn the AC(s) off after a hold period.
     </div>
     {% if config.setpoint_off_enabled && status.ac_on %}
       {% if status.at_setpoint %}
@@ -56,20 +54,18 @@
   <!-- Idle auto-off -->
   <div class="program-card" data-program="idle-off">
     <div class="program-head">
-      <div class="program-info">
-        <div class="program-name">Idle auto-off</div>
-        <div class="program-desc">
-          If no control changes happen for the selected period, turn the AC(s)
-          off. Live temperature readings are ignored so a steady room does not
-          keep the timer alive.
-        </div>
-      </div>
+      <div class="program-name">Idle auto-off</div>
       <button type="button"
               class="program-toggle{% if config.idle_off_enabled %} on{% else %} off{% endif %}"
               aria-pressed="{% if config.idle_off_enabled %}true{% else %}false{% endif %}"
               hx-post="/automation/idle-off/toggle"
               hx-vals='{"enabled":"{% if config.idle_off_enabled %}false{% else %}true{% endif %}"}'
               hx-target="#automation">{% if config.idle_off_enabled %}Enabled{% else %}Disabled{% endif %}</button>
+    </div>
+    <div class="program-desc">
+      If no control changes happen for the selected period, turn the AC(s)
+      off. Live temperature readings are ignored so a steady room does not
+      keep the timer alive.
     </div>
     {% if config.idle_off_enabled && idle.ac_on %}
       {% if let Some(t) = idle.target_time %}
