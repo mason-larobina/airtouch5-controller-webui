@@ -20,6 +20,10 @@
                   {% if !config.setpoint_off_enabled %} disabled{% endif %}
                   hx-post="/automation/setpoint-off/hold" hx-vals='{"mins":"60"}'
                   hx-target="#automation">1h</button>
+          <button type="button" class="btn preset{% if config.setpoint_off_hold_minutes() == 120 %} active{% endif %}"
+                  {% if !config.setpoint_off_enabled %} disabled{% endif %}
+                  hx-post="/automation/setpoint-off/hold" hx-vals='{"mins":"120"}'
+                  hx-target="#automation">2h</button>
         </div>
       </div>
       <button type="button"

@@ -487,13 +487,15 @@ h1 {
   color: var(--sel-text);
 }
 /* A segmented cell has `border: 0` except a 1px right divider, so the shared
-   `.active { border-color: var(--accent) }` rule above would recolour only
-   that one divider -- making the active cell's right edge a different colour
-   from every other divider in the bar. Keep the dividers uniform: the active
-   cell is shown by its accent-dim fill alone, matching the .mode-toggle
-   cells (which carry no dividers at all). */
+   `.active { border-color: var(--accent) }` rule above has no full border to
+   recolour -- unlike .btn.selected / .int-auto.active / .theme-btn.active,
+   which each carry a real 1px border that turns accent. Draw the same accent
+   highlight as an inset 1px ring so the selected cell reads identically to
+   those buttons, while keeping the inter-cell dividers uniform (the ring sits
+   just inside the cell edges and does not touch the divider geometry). */
 .segmented button.active {
   border-right-color: var(--border);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .btn.selected:hover {
   border-color: var(--accent);

@@ -447,7 +447,7 @@ manager/console failures.
 | Method | Path                              | Form field(s)          | Action                                        |
 | ------ | --------------------------------- | ---------------------- | --------------------------------------------- |
 | POST   | `/automation/setpoint-off/toggle` | `enabled=true\|false`  | Enable/disable the setpoint auto-off program. |
-| POST   | `/automation/setpoint-off/hold`   | `mins=15\|30\|60`      | Set the setpoint condition hold time.         |
+| POST   | `/automation/setpoint-off/hold`   | `mins=15\|30\|60\|120` | Set the setpoint condition hold time.         |
 | POST   | `/automation/idle-off/toggle`     | `enabled=true\|false`  | Enable/disable the idle auto-off program.     |
 | POST   | `/automation/idle-off/timeout`    | `mins=15\|30\|60\|120` | Set the idle timeout.                         |
 

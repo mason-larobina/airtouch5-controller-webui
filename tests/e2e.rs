@@ -1592,6 +1592,50 @@ async fn setpoint_hold_preset_marks_active() {
     .await;
 }
 
+#[tokio::test]
+async fn setpoint_off_hold_accepts_2h_preset() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        // The setpoint auto-off hold row mirrors the idle-off timeouts
+        // (15/30/60/120). Setting the 120-min (2h) preset must be accepted
+        // and render that button as the active one.
+        let _ = client()
+            .post(format!("http://{addr}/automation/setpoint-off/toggle"))
+            .form(&[("enabled", "true")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let body = client()
+            .post(format!("http://{addr}/automation/setpoint-off/hold"))
+            .form(&[("mins", "120")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let setpoint = program_card(&body, "setpoint-off");
+        assert!(
+            setpoint.contains(">2h</button>"),
+            "2h preset present: {setpoint}"
+        );
+        // The 120-min (2h) preset button should be the active one.
+        let before_120 = setpoint.split("mins\":\"120\"").next().unwrap();
+        assert!(
+            before_120
+                .rsplit("btn preset")
+                .next()
+                .unwrap()
+                .contains(" active"),
+            "120-min hold should be active: {setpoint}"
+        );
+    })
+    .await;
+}
+
 /// With the setpoint auto-off program enabled but the on-zone still above its
 /// setpoint, the card shows a muted "waiting for setpoint" status line.
 #[tokio::test]

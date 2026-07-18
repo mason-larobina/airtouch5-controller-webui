@@ -26,7 +26,7 @@ pub async fn toggle_setpoint_off(
     Ok(render(&state))
 }
 
-/// `POST /automation/setpoint-off/hold` -- `mins = 15 | 30 | 60`.
+/// `POST /automation/setpoint-off/hold` -- `mins = 15 | 30 | 60 | 120`.
 pub async fn set_setpoint_off_hold(
     State(state): State<AppState>,
     Form(form): Form<Vec<(String, String)>>,

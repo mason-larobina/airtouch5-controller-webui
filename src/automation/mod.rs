@@ -48,8 +48,9 @@ use crate::manager::snapshot::{self, SensorView, Snapshot, ZoneView};
 const SETPOINT_TOLERANCE_C: f32 = 0.5;
 
 /// The selectable hold-time presets (in minutes) for the setpoint auto-off
-/// program. 15 minutes is the default and matches the original requirement.
-pub const SETPOINT_HOLD_PRESETS: &[u64] = &[15, 30, 60];
+/// program. 15 minutes is the default and matches the original requirement;
+/// the row mirrors the idle auto-off timeouts (15/30/60/120).
+pub const SETPOINT_HOLD_PRESETS: &[u64] = &[15, 30, 60, 120];
 
 /// The selectable idle-timeout presets (in minutes) for the idle auto-off
 /// program.

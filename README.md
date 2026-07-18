@@ -34,7 +34,7 @@ conditioning.
 - **Automation programs.** Two hard-coded programs you can enable, disable, and
   configure in the UI (below the zones list): **Setpoint auto-off** turns the
   AC(s) off once every on-zone is in temperature mode and has reached its
-  setpoint (held for 15/30/60 minutes first), and **Idle auto-off** turns the
+  setpoint (held for 15/30/60/120 minutes first), and **Idle auto-off** turns the
   AC(s) off after 15/30/60/120 minutes with no control changes. Settings are
   persisted to a JSON file and survive restarts.
 - **Two binaries.** `aircon` talks to a real console; `aircon-mock` serves the
@@ -151,7 +151,8 @@ left untouched.
 - **Setpoint auto-off** -- armed only when every on-zone is in temperature
   control mode. It fires when every on-zone's sensor reading has reached its
   setpoint (cooling satisfied / heating satisfied, decided by the owning AC's
-  mode) and _stays_ that way for the configured hold time (15/30/60 minutes).
+  mode) and _stays_ that way for the configured hold time (15/30/60/120
+  minutes).
   A brief dip past the setpoint does not trip it.
 - **Idle auto-off** -- fires after the configured timeout (15/30/60/120
   minutes) with no control changes. "Control changes" are power, mode, fan
