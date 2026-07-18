@@ -212,12 +212,13 @@ h1 {
   gap: 8px 16px;
   align-items: center;
 }
+/* Card-title style, shared with .ac-card .name and .program-name so every
+   section's card header reads the same: 16px, weight 600, default text
+   color (no accent), normal case. The console name previously used the
+   accent color and a different size; both are dropped here for parity. */
 #system .title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
-}
-#system .console-name {
-  color: var(--accent);
 }
 #system .meta {
   display: flex;
@@ -287,8 +288,9 @@ h1 {
   align-items: center;
   gap: 8px;
 }
+/* Shares the card-title style with #system .title and .program-name. */
 .ac-card .name {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 .field .label {
@@ -843,8 +845,9 @@ footer a:hover {
 .program-info {
   min-width: 0;
 }
+/* Shares the card-title style with #system .title and .ac-card .name. */
 .program-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
 }
 .program-desc {
