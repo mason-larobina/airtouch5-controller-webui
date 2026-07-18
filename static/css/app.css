@@ -8,11 +8,14 @@
   --muted: #8a93a3;
   --accent: #4f9dff;
   --accent-dim: #2c4a6b;
-  --good: #43b581;
-  /* Tinted fill for "on/enabled" green states (program toggle, status
-     badge): the theme's --good at low alpha, so it sits lightly on both
-     dark and light panels. */
-  --good-dim: rgba(67, 181, 129, 0.14);
+  /* The "good" colour (on/enabled states, status badges) reuses the theme's
+     blue accent rather than a stock green: a cool green reads as off-palette
+     against midnight's blue palette, mirroring how the ember theme reuses
+     its warm-orange accent for the same role. */
+  --good: #4f9dff;
+  /* Tinted fill for "on/enabled" states (program toggle, status badge): the
+     theme's --good at low alpha, so it sits lightly on the panel. */
+  --good-dim: rgba(79, 157, 255, 0.14);
   /* Tinted fill for the amber "note" status badge (setpoint auto-off not
      active for the current mode), mirroring --good-dim. */
   --warn-dim: rgba(240, 169, 59, 0.14);
@@ -195,34 +198,32 @@ h1 {
   color: var(--muted);
   text-transform: uppercase;
 }
-/* Connected uses the same tinted green badge treatment as the other "on"
-   states (.program-toggle.on, .program-status.ok): a --good-dim fill with a
-   --good border and text. Disconnected stays a loud solid-red slab -- it is
-   an alarm and should shout. */
+/* The connection banner only appears when the manager has lost the link to
+   the console. On disconnect the manager keeps serving the last-known AC and
+   zone state (the cards are not emptied), so this red alarm is the only
+   signal that the displayed data is stale and a reconnect is in flight.
+   While connected the element stays in the DOM (so the SSE `state` swap can
+   replace it) but is hidden -- a green "connected" badge is just noise when
+   the UI is already live. */
 #connection-state {
-  border: var(--border-w) solid var(--good);
+  display: none;
+  border: var(--border-w) solid var(--bad);
   border-radius: var(--radius);
   padding: 8px 14px;
   font-size: 13px;
-  display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--good-dim);
-  color: var(--good);
+  background: var(--bad);
+  color: #1a0707;
   font-weight: 600;
 }
 #connection-state.disconnected {
-  background: var(--bad);
-  border-color: var(--bad);
-  color: #1a0707;
+  display: flex;
 }
 #connection-state .dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--good);
-}
-#connection-state.disconnected .dot {
   background: rgba(0, 0, 0, 0.35);
 }
 #system {
@@ -297,11 +298,6 @@ h1 {
   text-transform: uppercase;
   color: var(--muted);
   margin: 0;
-}
-.section-label .count {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
 }
 #acs {
   display: flex;
@@ -490,6 +486,15 @@ h1 {
   border-color: var(--accent);
   color: var(--sel-text);
 }
+/* A segmented cell has `border: 0` except a 1px right divider, so the shared
+   `.active { border-color: var(--accent) }` rule above would recolour only
+   that one divider -- making the active cell's right edge a different colour
+   from every other divider in the bar. Keep the dividers uniform: the active
+   cell is shown by its accent-dim fill alone, matching the .mode-toggle
+   cells (which carry no dividers at all). */
+.segmented button.active {
+  border-right-color: var(--border);
+}
 .btn.selected:hover {
   border-color: var(--accent);
 }
@@ -656,7 +661,11 @@ h1 {
 .zone-toggle.on {
   background: var(--good);
   border-color: var(--good);
-  box-shadow: 0 0 8px rgba(67, 181, 129, 0.65);
+  /* The on-glow halo derives from --good via color-mix so it tracks each
+     theme's on-colour (blue for midnight, orange for ember, phosphor green
+     for terminal) instead of a hardcoded green that was off-palette for
+     every theme but midnight. The blur radius is kept tight. */
+  box-shadow: 0 0 5px color-mix(in srgb, var(--good) 60%, transparent);
 }
 .zone-toggle.off {
   background: transparent;
@@ -665,7 +674,7 @@ h1 {
 .zone-toggle.turbo {
   background: var(--turbo);
   border-color: var(--turbo);
-  box-shadow: 0 0 8px rgba(176, 125, 240, 0.65);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--turbo) 60%, transparent);
 }
 .zone-temp {
   font-family: var(--mono);

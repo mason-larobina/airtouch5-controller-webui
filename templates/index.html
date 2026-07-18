@@ -10,7 +10,6 @@
     <section aria-labelledby="acs-label">
       <div class="section-label">
         <h2 id="acs-label">AC unit{% if snapshot.console.ac_count > 1 %}s{% endif %}</h2>
-        <span class="count">{{ snapshot.console.ac_count }} system{% if snapshot.console.ac_count != 1 %}s{% endif %}</span>
       </div>
       {% include "partials/acs.html" %}
     </section>
@@ -18,7 +17,6 @@
     <section aria-labelledby="zones-label">
       <div class="section-label">
         <h2 id="zones-label">Zones</h2>
-        <span class="count">{{ snapshot.console.zone_count }} zone{% if snapshot.console.zone_count != 1 %}s{% endif %}</span>
       </div>
       {% include "partials/zones.html" %}
     </section>

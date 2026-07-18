@@ -103,10 +103,10 @@ The page is laid out top to bottom:
 
 - **Controller card.** At the bottom: the console name with a `[refresh]`
   button, the console metadata fields (address, AirTouch ID, console ID,
-  firmware, update, AC units, zones), and a connected/disconnected status
-  line. The status turns red and reads "Disconnected -- reconnecting..." if
-  the console is lost; the server keeps the last-known state visible
-  underneath while it reconnects.
+  firmware, update, AC units, zones), and a disconnected status line. The
+  line is hidden while the console is reachable and turns into a red
+  "Disconnected -- reconnecting..." alarm when it is lost; the server keeps
+  the last-known state visible underneath while it reconnects.
 - **AC unit cards.** One per AC. The card header carries the unit name and
   a large ON/OFF power toggle; the body has controls for mode, fan speed, and
   setpoint, plus the current ("now") temperature and the setpoint value.

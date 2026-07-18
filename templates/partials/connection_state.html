@@ -2,6 +2,8 @@
      class="{% if snapshot.connected %}connected{% else %}disconnected{% endif %}"
      role="status" aria-live="polite"
      sse-swap="state" hx-swap="outerHTML">
+  {% if !snapshot.connected %}
   <span class="dot"></span>
-  <span>{% if snapshot.connected %}Connected to AirTouch 5 console{% else %}Disconnected - reconnecting...{% endif %}</span>
+  <span>Disconnected - reconnecting...</span>
+  {% endif %}
 </div>
