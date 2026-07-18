@@ -719,6 +719,13 @@ h1 {
   color: var(--muted);
   border: var(--border-w) solid var(--border);
 }
+/* Inline image flags (e.g. the low-battery icon) size with the badge
+   text and stay put rather than shrinking in the flex row. */
+.flag img {
+  height: 1.4em;
+  width: auto;
+  flex: none;
+}
 .flag.warn {
   color: var(--warn);
   border-color: var(--warn);

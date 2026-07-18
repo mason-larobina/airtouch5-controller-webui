@@ -1197,6 +1197,25 @@ async fn vendor_assets_cached_immutable() {
 }
 
 #[tokio::test]
+async fn icon_asset_is_served() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        let resp = client()
+            .get(format!("http://{addr}/icons/battery-low.svg"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::OK);
+        let body = resp.text().await.unwrap();
+        assert!(
+            body.contains("<svg"),
+            "expected an SVG body, got: {body}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn refresh_repulls_status() {
     capped(async {
         let (addr, _m) = spawn_server().await;

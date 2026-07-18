@@ -37,6 +37,10 @@ pub fn build_router(manager: ManagerHandle, automation: AutomationStore) -> Rout
     // Site stylesheet served from the static css directory.
     let css = ServeDir::new("static/css");
 
+    // Icon assets (e.g. the low-battery sensor indicator) served from the
+    // static icons directory.
+    let icons = ServeDir::new("static/icons");
+
     Router::new()
         // Pages
         .route("/", get(handlers::pages::index))
@@ -95,6 +99,8 @@ pub fn build_router(manager: ManagerHandle, automation: AutomationStore) -> Rout
         .nest_service("/vendor", vendor)
         // Stylesheet
         .nest_service("/css", css)
+        // Icon assets
+        .nest_service("/icons", icons)
         // Interaction logging: control actions at info (ip + action + result),
         // everything else at debug. Applied as the outermost layer so its
         // elapsed time covers the whole request.
