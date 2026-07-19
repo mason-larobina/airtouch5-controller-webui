@@ -34,16 +34,23 @@
     ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas,
     monospace;
 }
-/* Daylight-only button "pop": a two-tone inset bevel (a light inner-top edge
-   plus a dark inner-bottom edge, reading as light coming from the top) plus
-   a tight drop shadow, so standalone buttons lift off the panel without a
-   heavy solid shadow. Lives under [data-theme="daylight"] so only the
-   default light theme gets it; the dark themes leave --btn-pop unset, so the
-   button rules below fall back to none and keep their existing flat borders. */
+/* Daylight-only "pop" tokens: a two-tone inset bevel (a light inner-top
+   edge plus a dark inner-bottom edge, reading as light coming from the top)
+   plus a tight drop shadow, so standalone buttons and the large panel cards
+   lift off the page without a heavy solid shadow. --btn-pop sizes the bevel
+   for controls; --card-pop softens the bottom edge (0.10 vs 0.14) and reuses
+   the standard --shadow offset for the cards. Both live under
+   [data-theme="daylight"] so only the default light theme gets them; the
+   dark themes leave them unset, so the rules below fall back to none
+   (buttons / segmented / toggle) or --shadow (cards) and keep their
+   existing flat borders. */
 :root[data-theme="daylight"] {
   --btn-pop:
     inset 0 1px 0 rgba(255, 255, 255, 0.75),
     inset 0 -1px 0 rgba(28, 36, 51, 0.14), 0 1px 2px rgba(25, 35, 55, 0.22);
+  --card-pop:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(28, 36, 51, 0.10), 0 1px 3px rgba(25, 35, 55, 0.18);
 }
 /* Color themes. The plain :root block above is the default theme (daylight);
    every other theme is a custom-property override selected by the data-theme
@@ -241,7 +248,7 @@ h1 {
   background: var(--panel);
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--card-pop, var(--shadow));
   padding: 14px 16px;
   margin-top: 24px;
   display: flex;
@@ -331,7 +338,7 @@ h1 {
   background: var(--panel);
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--card-pop, var(--shadow));
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -391,6 +398,7 @@ h1 {
   border: var(--border-w) solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: var(--btn-pop, none);
 }
 .segmented button {
   appearance: none;
@@ -578,7 +586,7 @@ h1 {
   background: var(--panel);
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--card-pop, var(--shadow));
   overflow: hidden;
 }
 /* Bulk "all zones" control bar at the top of the zone list: ON/OFF
@@ -692,6 +700,7 @@ h1 {
   border: calc(var(--border-w) + 1px) solid var(--muted);
   background: transparent;
   padding: 0;
+  box-shadow: var(--btn-pop, none);
 }
 .zone-toggle:hover {
   box-shadow: 0 0 0 3px var(--accent-dim);
@@ -733,6 +742,7 @@ h1 {
   border: var(--border-w) solid var(--border);
   border-radius: 7px;
   overflow: hidden;
+  box-shadow: var(--btn-pop, none);
 }
 .mode-toggle button {
   appearance: none;
@@ -940,7 +950,7 @@ footer a:hover {
   background: var(--panel);
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--card-pop, var(--shadow));
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
