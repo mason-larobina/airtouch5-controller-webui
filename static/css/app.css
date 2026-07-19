@@ -1220,34 +1220,40 @@ footer a:hover {
   border-color: var(--accent);
   color: var(--sel-text);
 }
-/* Live status line for the setpoint auto-off card: a green badge while the
-   hold countdown is running ("turning off in N min"), a muted badge while
-   waiting for zones to reach their setpoints, or an amber "not active for
-   this mode" note when an On AC is not in a heating/cooling mode. Hidden
-   entirely when the program is disabled or no AC is on. */
+/* Live status footer band: the inverse of the tinted .program-head header
+   band -- pulled flush to the card's bottom edge (negative margins cancel
+   the 14px / 16px card padding) with a top border, and clipped to the
+   card's rounded bottom corners by the card's overflow: hidden. The fill
+   / border / text colour tracks the program's state: green (.ok) while the
+   hold countdown is running, muted (.wait) while waiting for zones, or
+   amber (.note) for the "not active for this mode" heads-up. Hidden
+   entirely when the program is disabled or no AC is on, so the card has no
+   footer band in that case. */
 .program-status {
   font-size: 12px;
   font-family: var(--mono);
-  padding: 8px 10px;
-  border-radius: 7px;
-  border: var(--border-w) solid var(--border);
+  padding: 10px 16px;
+  margin: 0 -16px -14px;
+  border: 0;
+  border-top: var(--border-w) solid var(--border);
   line-height: 1.4;
 }
 .program-status.ok {
   background: var(--good-dim);
-  border-color: var(--good);
+  border-top-color: var(--border);
   color: var(--good);
 }
 .program-status.wait {
-  background: var(--panel-3);
+  background: var(--panel-2);
+  border-top-color: var(--border);
   color: var(--muted);
 }
-/* Informational "not active for this mode" note for the setpoint auto-off
-   card: an amber-tinted badge (mirrors the green .ok badge) so it reads as
-   a gentle heads-up rather than an alarm. */
+/* Informational "not active for this mode" footer band for the setpoint
+   auto-off card: an amber-tinted band (mirrors the green .ok band) so it
+   reads as a gentle heads-up rather than an alarm. */
 .program-status.note {
   background: var(--warn-dim);
-  border-color: var(--warn);
+  border-top-color: var(--warn);
   color: var(--warn);
 }
 
