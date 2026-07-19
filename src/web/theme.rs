@@ -29,16 +29,6 @@ pub const THEMES: &[Theme] = &[
         bg: "#eef1f5",
     },
     Theme {
-        name: "midnight",
-        label: "Midnight",
-        bg: "#0f1115",
-    },
-    Theme {
-        name: "terminal",
-        label: "Terminal",
-        bg: "#050a06",
-    },
-    Theme {
         name: "ember",
         label: "Ember",
         bg: "#171210",
@@ -76,7 +66,7 @@ mod tests {
 
     #[test]
     fn unknown_theme_falls_back_to_default() {
-        assert_eq!(lookup("terminal").name, "terminal");
+        assert_eq!(lookup("ember").name, "ember");
         assert_eq!(lookup("bogus").name, "daylight");
         assert_eq!(lookup("").name, "daylight");
     }
