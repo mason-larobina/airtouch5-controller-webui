@@ -931,14 +931,13 @@ h1 {
   text-align: center;
   color: var(--accent);
   /* Flex to fill the middle of the segment between the two fixed 44px step
-     buttons; min-width: 0 lets the value ellipsis instead of overflowing. */
+     buttons; min-width: 0 lets the value shrink. Content is not clipped so the
+     full reading (e.g. 23.0 °C) shows even when it is wider than the cell. */
   flex: 1 1 auto;
   min-width: 0;
   min-height: var(--btn-h);
   padding: 10px 12px;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .zone-controls .val:hover:not(:disabled) {

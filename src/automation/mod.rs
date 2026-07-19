@@ -5,7 +5,7 @@
 //! Two programs ship today, both expressed as an enable toggle plus a small
 //! set of parameter presets surfaced in the UI (below the zones section):
 //!
-//! 1. **Setpoint auto-off** -- when every on-zone is in temperature control
+//! 1. **Setpoint Off** -- when every on-zone is in temperature control
 //!    mode and has *reached its setpoint* (cooling satisfied / heating
 //!    satisfied, decided by the owning AC's mode), turn the AC(s) off. The
 //!    condition must remain true for a configurable hold period (default 15
@@ -14,7 +14,7 @@
 //!    cooling mode (Heat, Cool, AutoHeat, AutoCool); in any other mode (Auto,
 //!    Dry, Fan) it stays idle and the card shows a "not active for this mode"
 //!    note.
-//! 2. **Idle auto-off** -- if there have been no control-relevant state
+//! 2. **Idle Off** -- if there have been no control-relevant state
 //!    changes for a configurable timeout (15/30/60/120 minutes), turn the
 //!    AC(s) off. "Control-relevant" excludes the live sensor/temperature
 //!    readings (which drift constantly) so the timer is only reset by real
@@ -401,7 +401,7 @@ pub fn spawn_automation(
                         continue;
                     }
 
-                    // (1) Setpoint auto-off.
+                    // (1) Setpoint Off.
                     if cfg.setpoint_off_enabled {
                         let cond = any_ac_on(&snap) && setpoint_condition(&snap);
                         let since = store.setpoint_since();
@@ -409,7 +409,7 @@ pub fn spawn_automation(
                             // Holding: if the hold has elapsed, fire and clear.
                             (Some(start), true) if start.elapsed() >= cfg.setpoint_off_hold => {
                                 tracing::info!(
-                                    "automation: setpoint auto-off firing (held {:?})",
+                                    "automation: setpoint off firing (held {:?})",
                                     start.elapsed()
                                 );
                                 turn_off_acs(&manager, &snap).await;
@@ -429,7 +429,7 @@ pub fn spawn_automation(
                         store.set_setpoint_since(None);
                     }
 
-                    // (2) Idle auto-off.
+                    // (2) Idle Off.
                     if cfg.idle_off_enabled {
                         let last_change = store.idle_last_change();
                         // No countdown running (e.g. just enabled without a
@@ -446,7 +446,7 @@ pub fn spawn_automation(
                             && last_change.elapsed() >= cfg.idle_off_timeout
                         {
                             tracing::info!(
-                                "automation: idle auto-off firing (idle {:?})",
+                                "automation: idle off firing (idle {:?})",
                                 last_change.elapsed()
                             );
                             turn_off_acs(&manager, &snap).await;

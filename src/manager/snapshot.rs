@@ -579,20 +579,24 @@ impl ZoneView {
         matches!(self.control_mode, ControlModeView::Temperature)
     }
 
-    /// Right-side sensor reading text: "24.3 C", "sensor n/a", or "no sensor".
+    /// Right-side sensor reading text: a degree-C reading (e.g. 24.3),
+    /// "sensor n/a", or "no sensor". The degree sign is emitted via the
+    /// \u{00B0} escape so this source stays ASCII-only (see AGENTS.md).
     pub fn sensor_display(&self) -> String {
         match &self.sensor {
             None => "no sensor".to_string(),
             Some(SensorView::NotAvailable) => "sensor n/a".to_string(),
-            Some(SensorView::Temperature(t)) => format!("{} C", t),
+            Some(SensorView::Temperature(t)) => format!("{} \u{00B0}C", t),
         }
     }
 
-    /// Stepper value text: "23.0 C" in temp mode, "65%" in airflow mode.
+    /// Stepper value text: a degree-C setpoint in temp mode (e.g. 23.0),
+    /// "65%" in airflow mode. The degree sign is emitted via \u{00B0} to
+    /// keep this source ASCII-only (see AGENTS.md).
     pub fn value_display(&self) -> String {
         match self.control_mode {
             ControlModeView::Temperature => match self.setpoint {
-                Some(t) => format!("{} C", t),
+                Some(t) => format!("{} \u{00B0}C", t),
                 None => "--".to_string(),
             },
             _ => format!("{}%", self.airflow_pct),
@@ -683,19 +687,24 @@ impl AcView {
         self.supported_fan_speeds.contains(&s)
     }
 
-    /// Current temperature text for the setpoint row, e.g. "24.3 C".
+    /// Current temperature text for the setpoint row, with a degree-C unit
+    /// (e.g. 24.3). The degree sign is emitted via \u{00B0} to keep this
+    /// source ASCII-only (see AGENTS.md).
     pub fn temp_display(&self) -> String {
         self.status
             .as_ref()
             .and_then(|s| s.temperature)
-            .map(|t| format!("{} C", t))
+            .map(|t| format!("{} \u{00B0}C", t))
             .unwrap_or_else(|| "--".to_string())
     }
-    /// Current setpoint text, e.g. "23.0".
+    /// Current setpoint text with a degree-C unit (e.g. 23.0), or "--" when
+    /// there is no setpoint. The degree sign is emitted via \u{00B0} to keep
+    /// this source ASCII-only (see AGENTS.md).
     pub fn setpoint_display(&self) -> String {
         self.status
             .as_ref()
             .and_then(|s| s.setpoint_str.clone())
+            .map(|s| format!("{} \u{00B0}C", s))
             .unwrap_or_else(|| "--".to_string())
     }
     /// Decremented setpoint text for the `-` button's hx-vals.

@@ -1,12 +1,12 @@
 <div id="automation" class="automation" sse-swap="automation" hx-swap="outerHTML">
 
-  <!-- Setpoint auto-off -->
+  <!-- Setpoint Off -->
   <div class="program-card" data-program="setpoint-off">
     <div class="program-head">
-      <div class="program-name">Setpoint auto-off</div>
+      <div class="program-name">Setpoint Off</div>
       <div class="program-controls">
       <div class="program-param">
-        <span class="label">Hold</span>
+        <span class="label">After</span>
         <div class="preset-group">
           <button type="button" class="btn preset{% if config.setpoint_off_hold_minutes() == 15 %} active{% endif %}"
                   {% if !config.setpoint_off_enabled %} disabled{% endif %}
@@ -62,10 +62,10 @@
     {% endif %}
   </div>
 
-  <!-- Idle auto-off -->
+  <!-- Idle Off -->
   <div class="program-card" data-program="idle-off">
     <div class="program-head">
-      <div class="program-name">Idle auto-off</div>
+      <div class="program-name">Idle Off</div>
       <div class="program-controls">
       <div class="program-param">
         <span class="label">Timeout</span>
