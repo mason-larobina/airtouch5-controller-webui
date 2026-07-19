@@ -21,8 +21,7 @@ axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread","macros","signal","time","sync"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace"] }   # request tracing
-askama = "0.12"            # compile-time Jinja-like templates
-askama_axum = "0.4"        # IntoResponse for askama
+askama = "0.16"            # compile-time Jinja-like templates (render() -> String, wrapped in Html)
 tracing, tracing-subscriber (env-filter)
 futures-util = "0.3"       # SSE stream combinators
 clap = { version = "4", features = ["derive","env"] }

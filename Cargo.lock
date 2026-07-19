@@ -34,7 +34,6 @@ version = "0.1.0"
 dependencies = [
  "airtouch5",
  "askama",
- "askama_axum",
  "axum",
  "chrono",
  "clap",
@@ -120,12 +119,6 @@ dependencies = [
  "serde",
  "serde_json",
 ]
-
-[[package]]
-name = "askama_axum"
-version = "0.5.0+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ebeda8ac47efa9ea6c5947c911a2db48a9d92cba6fff15ceb2ccbb1ee0f21e"
 
 [[package]]
 name = "askama_derive"
