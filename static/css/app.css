@@ -477,18 +477,57 @@ h1 {
   display: flex;
   align-items: center;
 }
+/* The AC setpoint stepper is a segmented control: a bordered panel-2 box
+   with inter-cell dividers, mirroring the zone .zone-controls stepper so
+   the - / setpoint / + read as one unit. The setpoint value is a plain
+   span (display only, not a button) so tapping it is a no-op -- only the
+   +/- buttons act. */
 .stepper {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
+  background: var(--panel-2);
+  border: var(--border-w) solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--btn-pop, none);
+}
+/* Segmented cells: drop the standalone .btn border / panel-3 fill / radius
+   / bevel -- the .stepper container draws the panel border + bevel, and
+   the inter-cell divider comes from the :not(:last-child) rule below. */
+.stepper .btn.step {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.stepper .btn.step:hover:not(:disabled) {
+  background: var(--panel-3);
 }
 .stepper .val {
   font-family: var(--mono);
   font-size: 18px;
   font-weight: 600;
-  min-width: 56px;
   text-align: center;
   color: var(--accent);
+  /* The value is a no-op span (not a button); it just fills the middle
+     cell between the two fixed 44px step buttons and centres the reading. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Inter-cell dividers inside the AC setpoint segment: the decrement button
+   and the value span each get a right divider; the increment button (last
+   child) does not, so the segment's right edge is clean. These selectors
+   outrank the border: 0 reset above on specificity. */
+.stepper .btn.step:not(:last-child),
+.stepper .val:not(:last-child) {
+  border-right: var(--border-w) solid var(--border);
 }
 .btn {
   appearance: none;
@@ -637,17 +676,16 @@ h1 {
   gap: 6px;
   flex-wrap: wrap;
 }
-/* Zone rows are laid out as a 5-column grid: zone name (fills remaining
-   width, ellipsises on overflow), current temp, [ - ], setpoint value, [ + ].
-   Every column except the name has a fixed width so all rows line up like a
-   table. The setpoint value is itself a button -- tapping it toggles the
-   zone between % (airflow) and C (temperature) control, so no separate
+/* Zone rows are laid out as a 3-column grid: zone name (fills remaining
+   width, ellipsises on overflow), current temp, and the segmented stepper
+   [ - | setpoint | + ]. The stepper is one fixed-width cell (two 44px step
+   buttons flanking the setpoint value) so all rows line up like a table.
+   The setpoint value is itself a button -- tapping it toggles the zone
+   between % (airflow) and C (temperature) control, so no separate
    % / C toggle column is needed. */
 .zone-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px var(--btn-step-w) 88px var(
-      --btn-step-w
-    );
+  grid-template-columns: minmax(0, 1fr) 88px auto;
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
@@ -664,12 +702,21 @@ h1 {
 .zone-row.off .name {
   color: var(--muted);
 }
-/* The control cluster (-, setpoint value, +) sits in one wrapper that
-   flattens into the row grid on desktop (display: contents) so each piece
-   becomes its own aligned column, then collapses back to a flex row on
-   narrow screens. The setpoint value doubles as the % / C mode toggle. */
+/* The control cluster (-, setpoint value, +) is one segmented control --
+   a bordered panel-2 box with inter-cell dividers, mirroring the AC mode /
+   fan-speed .segmented controls so the three pieces read as a single unit
+   instead of three loose buttons. The setpoint value doubles as the
+   % / C mode toggle. The fixed 176px width (44 + 88 + 44) matches the three
+   columns it replaced so zone rows still line up. */
 .zone-controls {
-  display: contents;
+  display: flex;
+  align-items: stretch;
+  width: 176px;
+  background: var(--panel-2);
+  border: var(--border-w) solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--btn-pop, none);
 }
 .zone-name {
   display: flex;
@@ -782,6 +829,16 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* Segmented cell: drop the standalone .btn border / panel-3 fill / radius
+     / bevel -- the .zone-controls container draws the panel border + bevel,
+     and the inter-cell divider comes from the :not(:last-child) rule. */
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.zone-controls .btn.step:hover:not(:disabled) {
+  background: var(--panel-3);
 }
 /* The +/- stepper glyphs are inline SVGs (stroke = currentColor) so they
    inherit the button's text colour and track every theme, the disabled
@@ -795,15 +852,19 @@ h1 {
 }
 .zone-controls .val {
   appearance: none;
-  border: var(--border-w) solid transparent;
+  border: 0;
   background: transparent;
-  border-radius: 7px;
+  border-radius: 0;
+  box-shadow: none;
   font-family: var(--mono);
   font-size: 16px;
   font-weight: 600;
   text-align: center;
   color: var(--accent);
-  flex: none;
+  /* Flex to fill the middle of the segment between the two fixed 44px step
+     buttons; min-width: 0 lets the value ellipsis instead of overflowing. */
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: var(--btn-h);
   padding: 10px 12px;
   cursor: pointer;
@@ -812,11 +873,18 @@ h1 {
   white-space: nowrap;
 }
 .zone-controls .val:hover:not(:disabled) {
-  border-color: var(--accent-dim);
-  background: var(--panel-2);
+  background: var(--panel-3);
 }
 .zone-controls .val:disabled {
   cursor: default;
+}
+/* Inter-cell dividers inside the zone segmented stepper: the decrement
+   button and the setpoint value each get a right divider; the increment
+   button (last child) does not, so the segment's right edge is clean.
+   These selectors outrank the border: 0 reset above on specificity / order. */
+.zone-controls .btn.step:not(:last-child),
+.zone-controls .val:not(:last-child) {
+  border-right: var(--border-w) solid var(--border);
 }
 .zone-flags {
   display: inline-flex;
@@ -1127,11 +1195,9 @@ footer a:hover {
     grid-area: temp;
   }
   .zone-controls {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 8px;
+    /* The segmented stepper keeps its fixed 176px width and pins to the
+       right edge of the stacked row. */
+    justify-self: end;
     grid-area: controls;
   }
 }
