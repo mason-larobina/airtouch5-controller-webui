@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-airtouch5 = { path = "airtouch5", features = ["control"] }
+airtouch5 = { git = "https://github.com/mason-larobina/airtouch5", features = ["control"] }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
-tower-http = { version = "0.6", features = ["trace"] }
-askama = "0.12"
-askama_axum = "0.4"
+tower-http = { version = "0.7", features = ["trace"] }
+askama = "0.16"
+askama_axum = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures-util = "0.3"
@@ -20,7 +20,7 @@ dirs = "6"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [dev-dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream"] }
 
 [profile.release]
 # For cargo flamegraph
