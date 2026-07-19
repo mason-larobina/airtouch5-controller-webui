@@ -294,6 +294,7 @@ h1 {
   border-radius: 8px;
   padding: 10px 16px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   box-shadow: var(--btn-pop, none);
 }
@@ -379,8 +380,16 @@ h1 {
   cursor: pointer;
   box-shadow: var(--btn-pop, none);
 }
+/* Breathing pulse for the status dot of an "on" pill (AC running /
+   automation enabled): a slow opacity fade in and out over 2.4s, gentle
+   enough to read as a live heartbeat rather than a flash. Stopped / off
+   pills do not get it -- a still dot reads as idle. */
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 /* Leading status dot tracks the label via currentColor: muted when stopped,
-   orange when running. */
+   orange when running. The running dot breathes (see @keyframes breathe). */
 .ac-power::before {
   content: "";
   width: 8px;
@@ -407,6 +416,9 @@ h1 {
 .ac-power.on:hover:not(:disabled) {
   border-color: var(--run);
   color: var(--run);
+}
+.ac-power.on::before {
+  animation: breathe 2.4s ease-in-out infinite;
 }
 /* Contrast: the solid-black on-fill needs white text (the dot follows via
    currentColor), matching every other inverted on-state in that theme. */
@@ -932,7 +944,7 @@ h1 {
   color: var(--accent);
   /* Flex to fill the middle of the segment between the two fixed 44px step
      buttons; min-width: 0 lets the value shrink. Content is not clipped so the
-     full reading (e.g. 23.0 °C) shows even when it is wider than the cell. */
+     full reading (e.g. 23.0 degC) shows even when it is wider than the cell. */
   flex: 1 1 auto;
   min-width: 0;
   min-height: var(--btn-h);
@@ -1195,6 +1207,9 @@ footer a:hover {
   border-color: var(--good);
   color: var(--good);
 }
+.program-toggle.on::before {
+  animation: breathe 2.4s ease-in-out infinite;
+}
 .program-param {
   display: flex;
   align-items: center;
@@ -1278,5 +1293,15 @@ footer a:hover {
        right edge of the stacked row. */
     justify-self: end;
     grid-area: controls;
+  }
+}
+
+/* Respect reduced-motion: stop the breathing dot pulse for users who have
+   asked the OS to minimise motion. The dot is still shown (solid), it just
+   no longer animates. */
+@media (prefers-reduced-motion: reduce) {
+  .ac-power.on::before,
+  .program-toggle.on::before {
+    animation: none;
   }
 }
