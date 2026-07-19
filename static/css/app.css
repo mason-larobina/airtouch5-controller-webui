@@ -222,10 +222,11 @@ body {
 h1 {
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   margin: 0 0 16px;
   color: var(--muted);
   text-transform: uppercase;
+  text-align: center;
 }
 /* The connection banner only appears when the manager has lost the link to
    the console. On disconnect the manager keeps serving the last-known AC and
@@ -261,7 +262,6 @@ h1 {
   border-radius: var(--radius);
   box-shadow: var(--card-pop, var(--shadow));
   padding: 14px 16px;
-  margin-top: 24px;
   display: flex;
   flex-direction: column;
   gap: 10px;

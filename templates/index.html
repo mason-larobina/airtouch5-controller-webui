@@ -2,6 +2,7 @@
 
 {% block content %}
 <div class="page">
+  <h1>AirTouch5 Controller</h1>
   <main hx-ext="sse" sse-connect="/events">
     <section aria-labelledby="acs-label">
       <div class="section-label">
@@ -24,7 +25,12 @@
       {% include "partials/automation.html" %}
     </section>
 
-    {% include "partials/system.html" %}
+    <section aria-labelledby="system-label">
+      <div class="section-label">
+        <h2 id="system-label">System</h2>
+      </div>
+      {% include "partials/system.html" %}
+    </section>
   </main>
 
   <footer>
