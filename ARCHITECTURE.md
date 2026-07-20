@@ -1,9 +1,9 @@
-# Architecture -- `airtouch5-controller-webui`
+# Architecture -- `airtouch5-webui`
 
 This document is for contributors. For user-facing usage see **README.md**.
 
-`airtouch5-controller-webui` is a library crate plus two thin binaries (`airtouch5-controller-webui` for a real
-AirTouch 5 console, `airtouch5-controller-webui-mock` for an in-memory controller) that serve a
+`airtouch5-webui` is a library crate plus two thin binaries (`airtouch5-webui` for a real
+AirTouch 5 console, `airtouch5-webui-mock` for an in-memory controller) that serve a
 server-rendered web UI over [htmx](https://htmx.org) with live updates pushed
 over Server-Sent Events (SSE). It wraps the
 [`airtouch5`](https://codeberg.org/kbriggs/airtouch5) crate.
@@ -81,16 +81,16 @@ The crate (`src/lib.rs`) exposes:
     `zone.rs` (`POST /zone/*` and bulk `/zones/*`), `ac.rs` (`POST /ac/*`),
     `automation.rs` (`POST /automation/*`).
 - `mock.rs` -- an in-memory controller implementing the same `ManagerHandle`
-  contract, used by `airtouch5-controller-webui-mock` and the e2e tests.
+  contract, used by `airtouch5-webui-mock` and the e2e tests.
 - `templates.rs` -- the askama `Template` structs (one per template file) and
   the `render_*` helpers the handlers and SSE stream call.
 - `config.rs` -- `Config { listen, discovery_timeout, log_level }`.
 
 Binaries:
 
-- `src/main.rs` -- `airtouch5-controller-webui`: clap CLI, tracing init, `spawn_manager`, load the
+- `src/main.rs` -- `airtouch5-webui`: clap CLI, tracing init, `spawn_manager`, load the
   automation store, `spawn_automation`, `serve`.
-- `src/bin/airtouch5-controller-webui-mock.rs` -- `airtouch5-controller-webui-mock`: clap CLI, tracing init,
+- `src/bin/airtouch5-webui-mock.rs` -- `airtouch5-webui-mock`: clap CLI, tracing init,
   `spawn_mock_controller(sample_snapshot())`, load the automation store,
   `spawn_automation`, `serve`.
 
@@ -480,7 +480,7 @@ diff stream -- it only changes through these POSTs.
 `MockController` lets tests inject arbitrary live changes (as if someone
 adjusted a zone at the wall console) via `mutate(FnOnce(&mut Snapshot))`, which
 exercises the SSE dirty-diff path. `sample_snapshot()` builds the one-AC /
-six-zone fixture used by `airtouch5-controller-webui-mock` and the test suite.
+six-zone fixture used by `airtouch5-webui-mock` and the test suite.
 
 ## 8. Logging and request middleware
 
@@ -565,7 +565,7 @@ persist to the configured JSON file atomically (write-to-tmp + rename), and
 the parent directory is created on first write. On
 startup `AutomationStore::load(path)` reads the file back; the path is the
 `--automation-config` flag value, or the XDG default
-(`$XDG_CONFIG_HOME/airtouch5-controller-webui/automation.json`) when the flag is unset. tests use
+(`$XDG_CONFIG_HOME/airtouch5-webui/automation.json`) when the flag is unset. tests use
 `AutomationStore::new(config)` for an in-memory, non-persisting store. Defaults:
 both programs disabled, 15-minute setpoint hold, 30-minute idle timeout.
 

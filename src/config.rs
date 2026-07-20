@@ -7,7 +7,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-/// Configuration for the airtouch5-controller-webui web server.
+/// Configuration for the airtouch5-webui web server.
 #[derive(Clone, Debug)]
 pub struct Config {
     /// Address/port the HTTP server listens on.

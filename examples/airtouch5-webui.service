@@ -1,4 +1,4 @@
-# airtouch5-controller-webui.service
+# airtouch5-webui.service
 #
 # Example systemd unit for the AirTouch 5 web UI. Copy to
 # /etc/systemd/system/ (or ~/.config/systemd/user/ for a user service) and
@@ -7,21 +7,21 @@
 # Install:
 #   1. Build and install the binary:
 #        cargo build --release
-#        sudo install -m 0755 target/release/airtouch5-controller-webui \
-#          /usr/local/bin/airtouch5-controller-webui
+#        sudo install -m 0755 target/release/airtouch5-webui \
+#          /usr/local/bin/airtouch5-webui
 #   2. Create the service user (static, so its state dir is stable across
 #      reboots -- needed to persist the automation config):
 #        sudo useradd --system --no-create-home --shell /usr/sbin/nologin \
 #          airtouch5
 #   3. Copy this unit file:
-#        sudo install -m 0644 examples/airtouch5-controller-webui.service \
-#          /etc/systemd/system/airtouch5-controller-webui.service
+#        sudo install -m 0644 examples/airtouch5-webui.service \
+#          /etc/systemd/system/airtouch5-webui.service
 #   4. Reload systemd and enable + start it:
 #        sudo systemctl daemon-reload
-#        sudo systemctl enable --now airtouch5-controller-webui
+#        sudo systemctl enable --now airtouch5-webui
 #   5. Check it is running and view logs:
-#        systemctl status airtouch5-controller-webui
-#        journalctl -u airtouch5-controller-webui -f
+#        systemctl status airtouch5-webui
+#        journalctl -u airtouch5-webui -f
 #
 # Configuration: all options are CLI flags (no env vars). Pass them on the
 # ExecStart line; the defaults match the binary's own defaults (bind
@@ -35,7 +35,7 @@
 
 [Unit]
 Description=AirTouch 5 web UI
-Documentation=https://github.com/mason-larobina/airtouch5-controller-webui
+Documentation=https://github.com/mason-larobina/airtouch5-webui
 # The app discovers the console via UDP, so it needs the network up.
 After=network-online.target
 Wants=network-online.target
@@ -51,11 +51,11 @@ StateDirectory=airtouch5
 
 # --- Runtime options (tweak as needed) -------------------------------------
 # All options are CLI flags. Adjust the flags below to taste.
-ExecStart=/usr/local/bin/airtouch5-controller-webui --automation-config /var/lib/airtouch5/automation.json
+ExecStart=/usr/local/bin/airtouch5-webui --automation-config /var/lib/airtouch5/automation.json
 
 # Logging is the one env-driven option: RUST_LOG sets the tracing filter
-# (default airtouch5_controller_webui=info,tower_http=info).
-Environment=RUST_LOG=airtouch5_controller_webui=info,tower_http=info
+# (default airtouch5_webui=info,tower_http=info).
+Environment=RUST_LOG=airtouch5_webui=info,tower_http=info
 
 # --- Restart policy --------------------------------------------------------
 Restart=on-failure

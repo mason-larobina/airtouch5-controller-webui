@@ -1,4 +1,4 @@
-//! `airtouch5-controller-webui` binary: the real AirTouch 5 entrypoint.
+//! `airtouch5-webui` binary: the real AirTouch 5 entrypoint.
 //!
 //! Parses CLI args (clap), spawns the connection manager (which discovers and
 //! connects to a real console), and serves the web UI. Logging is the one
@@ -10,12 +10,12 @@ use std::time::Duration;
 
 use clap::Parser;
 
-use airtouch5_controller_webui::automation::{self, AutomationStore};
-use airtouch5_controller_webui::{config::Config, manager::spawn_manager, serve};
+use airtouch5_webui::automation::{self, AutomationStore};
+use airtouch5_webui::{config::Config, manager::spawn_manager, serve};
 
-/// airtouch5-controller-webui: AirTouch 5 web UI.
+/// airtouch5-webui: AirTouch 5 web UI.
 #[derive(Parser, Debug)]
-#[command(name = "airtouch5-controller-webui", version, about = "AirTouch 5 web UI")]
+#[command(name = "airtouch5-webui", version, about = "AirTouch 5 web UI")]
 struct Cli {
     /// Address/port to bind the HTTP server (e.g. 127.0.0.1:3000).
     #[arg(long, default_value = "0.0.0.0:3000")]
@@ -36,7 +36,7 @@ struct Cli {
 
     /// Path to the automation config file (enable/disable + parameters).
     /// Created/updated on change; loaded on startup. When unset, defaults to
-    /// `$XDG_CONFIG_HOME/airtouch5-controller-webui/automation.json` (~/.config/airtouch5-controller-webui/...).
+    /// `$XDG_CONFIG_HOME/airtouch5-webui/automation.json` (~/.config/airtouch5-webui/...).
     #[arg(long)]
     automation_config: Option<PathBuf>,
 }
@@ -53,14 +53,14 @@ async fn main() {
     // is read from RUST_LOG, falling back to a sensible default.
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| {
-            tracing_subscriber::EnvFilter::new("airtouch5_controller_webui=info,tower_http=info")
+            tracing_subscriber::EnvFilter::new("airtouch5_webui=info,tower_http=info")
         });
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(false)
         .init();
 
-    tracing::info!("airtouch5-controller-webui starting; listening on {}", config.listen);
+    tracing::info!("airtouch5-webui starting; listening on {}", config.listen);
 
     // Spawn the connection manager (discovers + connects in the background).
     let manager = spawn_manager((*config).clone()).await;

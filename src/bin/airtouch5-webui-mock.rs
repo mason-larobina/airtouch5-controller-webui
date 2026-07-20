@@ -1,7 +1,7 @@
-//! `airtouch5-controller-webui-mock` binary: the mock AirTouch 5 entrypoint.
+//! `airtouch5-webui-mock` binary: the mock AirTouch 5 entrypoint.
 //!
-//! Same CLI surface as `airtouch5-controller-webui` (minus the discovery timeout), but it serves the
-//! UI against an in-memory mock controller ([`airtouch5_controller_webui::mock`]) instead of
+//! Same CLI surface as `airtouch5-webui` (minus the discovery timeout), but it serves the
+//! UI against an in-memory mock controller ([`airtouch5_webui::mock`]) instead of
 //! discovering a real console. Handy for manual UI development in a browser
 //! without hardware, and for integration tests.
 //!
@@ -12,13 +12,13 @@ use std::time::Duration;
 
 use clap::Parser;
 
-use airtouch5_controller_webui::automation::{self, AutomationStore};
-use airtouch5_controller_webui::{mock, serve};
+use airtouch5_webui::automation::{self, AutomationStore};
+use airtouch5_webui::{mock, serve};
 
-/// airtouch5-controller-webui-mock: AirTouch 5 web UI against an in-memory mock controller.
+/// airtouch5-webui-mock: AirTouch 5 web UI against an in-memory mock controller.
 #[derive(Parser, Debug)]
 #[command(
-    name = "airtouch5-controller-webui-mock",
+    name = "airtouch5-webui-mock",
     version,
     about = "AirTouch 5 web UI (mock controller)"
 )]
@@ -38,7 +38,7 @@ struct Cli {
 
     /// Path to the automation config file (enable/disable + parameters).
     /// Created/updated on change; loaded on startup. When unset, defaults to
-    /// `$XDG_CONFIG_HOME/airtouch5-controller-webui/automation.json` (~/.config/airtouch5-controller-webui/...).
+    /// `$XDG_CONFIG_HOME/airtouch5-webui/automation.json` (~/.config/airtouch5-webui/...).
     #[arg(long)]
     automation_config: Option<PathBuf>,
 }
@@ -50,13 +50,13 @@ async fn main() {
     // Tracing init. Logging is the one env-driven option: the tracing filter
     // is read from RUST_LOG, falling back to a sensible default.
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("airtouch5_controller_webui=info,tower_http=info"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("airtouch5_webui=info,tower_http=info"));
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(false)
         .init();
 
-    tracing::info!("airtouch5-controller-webui-mock starting; listening on {}", cli.bind);
+    tracing::info!("airtouch5-webui-mock starting; listening on {}", cli.bind);
 
     // Spawn the mock controller with the sample (mockup-like) state.
     let (manager, _mock) = mock::spawn_mock_controller(mock::sample_snapshot());

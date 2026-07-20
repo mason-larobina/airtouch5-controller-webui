@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "airtouch5-controller-webui"
+name = "airtouch5-webui"
 version = "0.1.0"
 dependencies = [
  "airtouch5",
