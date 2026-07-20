@@ -10,6 +10,8 @@ client-side JavaScript framework, no build step, and no app to install.
 You point a browser at it; it finds the console; you control your air
 conditioning.
 
+![webui-screenshot](webui-screenshot.png)
+
 ## Features
 
 - **Automatic discovery.** The server finds the AirTouch 5 console on the LAN
