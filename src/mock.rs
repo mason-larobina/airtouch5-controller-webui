@@ -408,6 +408,18 @@ fn apply_ac(snap: &mut Snapshot, id: u8, req: AcControlReq) -> Result<(), String
                 AcMode::Fan => "Fan",
                 AcMode::Cool => "Cool",
             });
+            // Sync the per-zone mode slug so the zone power toggle re-themes
+            // to the in-theme mode colour (blue for cooling, orange for
+            // heat, etc.): the toggle's `data-ac-mode` -> `--acm` mapping is
+            // what colours it. The real build path recomputes this per
+            // snapshot from the owning AC; the mock mutates in place, so we
+            // update it here, mirroring the `ac_power_on` sync above.
+            let slug = ac.mode_slug();
+            for z in snap.zones.values_mut() {
+                if z.ac_id == Some(id) {
+                    z.ac_mode_slug = slug;
+                }
+            }
         }
         AcControlReq::FanSpeed(f) => {
             let status = ensure_status(ac);

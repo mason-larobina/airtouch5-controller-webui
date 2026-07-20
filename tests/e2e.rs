@@ -1030,6 +1030,64 @@ async fn ac_setpoint_renders_updated_value() {
 }
 
 #[tokio::test]
+async fn ac_mode_switch_re_themes_zone_toggle() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        // The fixture starts in Cool mode, so every zone row carries
+        // data-ac-mode="cool" and the on-zone power toggle reads the cool
+        // (blue) mode colour via the --acm mapping. Switching the AC to Heat
+        // must re-sync the per-zone slug so the toggle re-themes to heat
+        // (orange). The mock mutates the snapshot in place, so this only
+        // happens if the Mode branch syncs ac_mode_slug onto its zones.
+        {
+            let body = client()
+                .get(format!("http://{addr}/partials/zones/0"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            assert!(
+                body.contains("data-ac-mode=\"cool\""),
+                "zone 0 should start in cool mode, got: {body}"
+            );
+        }
+        // Switch the AC mode to heat. The mode handler returns the AC card,
+        // not the zones, so re-fetch the zone partial afterwards to confirm
+        // the slug propagated.
+        let _ = client()
+            .post(format!("http://{addr}/ac/0/mode"))
+            .form(&[("mode", "heat")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let body = client()
+            .get(format!("http://{addr}/partials/zones/0"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(
+            body.contains("data-ac-mode=\"heat\""),
+            "switching AC mode to heat should re-theme zone 0 to heat, got: {body}"
+        );
+        // The on-zone toggle still reads as on (its colour now comes from
+        // the heat --acm instead of the cool one).
+        assert!(
+            body.contains("zone-toggle on"),
+            "zone 0 stays on across a mode switch, got: {body}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn ac_power_toggle_turns_off() {
     capped(async {
         let (addr, _m) = spawn_server().await;
