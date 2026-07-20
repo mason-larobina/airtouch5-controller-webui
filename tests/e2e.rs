@@ -235,7 +235,7 @@ async fn zone_control_type_to_temperature_switches_mode() {
             .1
             .trim();
         assert!(
-            inner.contains(" C"),
+            inner.contains("\u{00B0}C"),
             "val must show a temperature setpoint after the switch, got: {body}"
         );
         assert!(
@@ -301,7 +301,7 @@ async fn zone_control_type_toggle_round_trips() {
             .1
             .trim();
         assert!(
-            inner.contains(" C"),
+            inner.contains("\u{00B0}C"),
             "first toggle (airflow -> temp) must show a setpoint, got: {body}"
         );
 
@@ -700,7 +700,7 @@ async fn zones_partial_renders_bulk_bar_with_airflow_presets() {
             body.contains("preset-row preset-temperature"),
             "temperature preset row missing, got: {body}"
         );
-        for (val, label) in [("25", "25%"), ("50", "50%"), ("75", "75%"), ("100", "100%")] {
+        for (val, label) in [("25", "25"), ("50", "50"), ("75", "75"), ("100", "100")] {
             assert!(
                 body.contains(&format!("{{\"mode\":\"airflow\",\"value\":\"{val}\"}}")),
                 "airflow preset {label:?} (value {val:?}) missing, got: {body}"
@@ -1355,13 +1355,14 @@ fn program_card<'a>(body: &'a str, program: &str) -> &'a str {
 /// so we split on the button's hx-vals and walk back to its class attribute --
 /// this is robust to the exact indentation/whitespace of the header layout.
 fn ac_power_selected(body: &str, power: &str) -> bool {
-    let needle = format!("hx-vals='{{\"power\":\"{power}\"}}'");
-    let before = body.split(&needle).next().unwrap_or("");
-    before
-        .rsplit("class=\"btn")
-        .next()
-        .unwrap_or("")
-        .contains("selected")
+    // The AC power is a single toggle button. When the AC is on the button
+    // carries the `on` class and shows "Running"; when off it shows "Stopped".
+    let has_toggle = body.contains("hx-vals='{\"power\":\"toggle\"}'");
+    match power {
+        "on" => body.contains("class=\"ac-power on\""),
+        "off" => has_toggle && !body.contains("class=\"ac-power on\""),
+        _ => false,
+    }
 }
 
 #[tokio::test]
@@ -1378,10 +1379,10 @@ async fn index_renders_automation_section() {
             .unwrap();
         assert!(body.contains("Automation"), "section label missing");
         assert!(
-            body.contains("Setpoint auto-off"),
+            body.contains("Setpoint Off"),
             "setpoint program missing"
         );
-        assert!(body.contains("Idle auto-off"), "idle program missing");
+        assert!(body.contains("Idle Off"), "idle program missing");
         // Both programs default to disabled: the toggle reads "Disabled" with the
         // off styling.
         let setpoint = program_card(&body, "setpoint-off");
@@ -1411,8 +1412,8 @@ async fn automation_partial_get() {
             .await
             .unwrap();
         assert!(body.contains("id=\"automation\""));
-        assert!(body.contains("Setpoint auto-off"));
-        assert!(body.contains("Idle auto-off"));
+        assert!(body.contains("Setpoint Off"));
+        assert!(body.contains("Idle Off"));
     })
     .await;
 }
@@ -2002,7 +2003,7 @@ async fn theme_cookie_round_trip() {
             "default theme-color missing"
         );
         // Every theme gets a selector button.
-        for name in ["midnight", "daylight", "terminal", "ember", "contrast"] {
+        for name in ["daylight", "ember", "contrast"] {
             assert!(
                 body.contains(&format!(r#"data-set-theme="{name}""#)),
                 "selector button for {name} missing"
@@ -2013,7 +2014,7 @@ async fn theme_cookie_round_trip() {
         // (the client applies the theme itself, hx-swap="none").
         let resp = client()
             .post(format!("http://{addr}/theme"))
-            .form(&[("name", "terminal")])
+            .form(&[("name", "ember")])
             .send()
             .await
             .unwrap();
@@ -2026,7 +2027,7 @@ async fn theme_cookie_round_trip() {
             .unwrap()
             .to_string();
         assert!(
-            set_cookie.contains("theme=terminal"),
+            set_cookie.contains("theme=ember"),
             "cookie: {set_cookie}"
         );
         assert!(
