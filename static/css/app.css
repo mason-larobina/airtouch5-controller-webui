@@ -97,11 +97,12 @@
   --accent: #ff9e4f;
   --accent-dim: #54371f;
   /* The shared cool green --good reads as out of place against ember's warm
-     orange palette, so the on/enabled/status "good" colour reuses the theme
-     accent -- a warm orange -- keeping every positive state on-palette. */
-  --good: #ff9e4f;
-  --good-dim: rgba(255, 158, 79, 0.16);
-  --warn: #f0a93b;
+     palette, so Fan gets a lighter warm-sand tone that is clearly distinct
+     from the orange accent (Cool) and the golden yellow Dry. */
+  --good: #d4a574;
+  --good-dim: rgba(212, 165, 116, 0.16);
+  --warn: #e8b84a;
+  --warn-dim: rgba(232, 184, 74, 0.16);
   --bad: #e25b5b;
   --turbo: #c490f0;
   --turbo-dim: rgba(196, 144, 240, 0.16);
