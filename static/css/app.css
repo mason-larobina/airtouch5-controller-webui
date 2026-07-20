@@ -786,6 +786,12 @@ h1 {
 .bulk-bar .power-group .btn {
   min-width: 48px;
 }
+.bulk-bar .btn.preset {
+  color: var(--muted);
+}
+.bulk-bar .btn.preset:hover:not(:disabled) {
+  color: var(--text);
+}
 /* The two preset rows are both rendered; only the one matching the
    bar's current `data-bulk-mode` is shown. Toggling the % / Temp buttons
    just flips that attribute (client-side), so no request is needed. */
