@@ -1360,6 +1360,96 @@ async fn sse_emits_zone_fragment_on_live_change() {
     .await;
 }
 
+/// Regression: with the AC off, toggling a zone must push only the affected
+/// `zone-<id>` fragment -- NOT an `automation` fragment. The automation card
+/// renders no live status while no AC is on, so re-emitting it on a zone toggle
+/// is a spurious update. (The derived setpoint-off status used to carry on-zone
+/// counts that changed on every toggle, tripping the SSE diff.)
+#[tokio::test]
+async fn zone_toggle_with_ac_off_does_not_re_emit_automation() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        let c = client();
+
+        // Turn AC 0 off before connecting, so the initial SSE render already
+        // reflects the AC-off state and the toggles below are the only change.
+        c.post(format!("http://{addr}/ac/0/power"))
+            .form(&[("power", "off")])
+            .send()
+            .await
+            .unwrap();
+
+        let resp = c
+            .get(format!("http://{addr}/events"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::OK);
+        let mut stream = resp.bytes_stream();
+
+        let mut buf = Vec::<u8>::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+        // Drain the initial full render, which ends with the `presets` event.
+        let mut initial_done = false;
+        while !initial_done {
+            let chunk = tokio::time::timeout_at(deadline, stream.next())
+                .await
+                .expect("SSE timed out draining the initial render");
+            buf.extend_from_slice(&chunk.expect("stream errored").expect("chunk errored"));
+            while let Some(idx) = buf.windows(2).position(|w| w == b"\n\n") {
+                let raw = buf.drain(..idx + 2).collect::<Vec<_>>();
+                if let Some((event, _)) = parse_sse_event(&raw) {
+                    if event == "presets" {
+                        initial_done = true;
+                    }
+                }
+            }
+        }
+
+        // Toggle zone 1 (the action under test) then zone 2 (a sentinel that
+        // guarantees the stream is live and producing zone events).
+        for z in [1u8, 2u8] {
+            c.post(format!("http://{addr}/zone/{z}/power"))
+                .form(&[("power", "toggle")])
+                .send()
+                .await
+                .unwrap();
+        }
+
+        // Collect every event until the stream goes idle (the in-process mock
+        // delivers a change's fragments within milliseconds, so a quiet gap
+        // means the batch is fully drained -- no keep-alive fires this soon).
+        let mut events = Vec::<String>::new();
+        loop {
+            match tokio::time::timeout(Duration::from_millis(500), stream.next()).await {
+                Ok(Some(Ok(bytes))) => {
+                    buf.extend_from_slice(&bytes);
+                    while let Some(idx) = buf.windows(2).position(|w| w == b"\n\n") {
+                        let raw = buf.drain(..idx + 2).collect::<Vec<_>>();
+                        if let Some((event, _)) = parse_sse_event(&raw) {
+                            events.push(event);
+                        }
+                    }
+                }
+                Ok(Some(Err(e))) => panic!("stream errored: {e}"),
+                Ok(None) => break,          // server closed the stream
+                Err(_) => break,            // idle gap: batch drained
+            }
+        }
+
+        assert!(
+            events.iter().any(|e| e == "zone-1") && events.iter().any(|e| e == "zone-2"),
+            "expected the toggled zone fragments over SSE, got: {events:?}"
+        );
+        assert!(
+            !events.iter().any(|e| e == "automation"),
+            "toggling a zone with the AC off must not re-emit the automation card, got: {events:?}"
+        );
+    })
+    .await;
+}
+
 /// Parse one SSE event block (raw bytes ending in `\n\n`) into `(event, data)`.
 /// Comment lines (`:`) and blank lines are ignored; `data:` lines are joined.
 fn parse_sse_event(raw: &[u8]) -> Option<(String, String)> {

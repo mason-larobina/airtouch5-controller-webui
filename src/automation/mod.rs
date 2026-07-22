@@ -569,14 +569,31 @@ pub fn setpoint_off_status(
     cfg: &AutomationConfig,
     since: Option<Instant>,
 ) -> SetpointOffStatus {
-    let (at_setpoint, satisfied, on_zones) = setpoint_detail(snap);
     let ac_on = any_ac_on(snap);
+    // The derived detail (mode_eligible / at_setpoint / satisfied / on_zones /
+    // target_time) is only ever rendered while the program is enabled *and* an
+    // AC is on (see automation.html -- everything below the description is
+    // gated on `enabled && ac_on`). Computing it unconditionally would make
+    // this struct change on every zone toggle even when nothing is shown,
+    // which spams the SSE `automation` re-emit (the diff compares these
+    // structs). When the program is inert, report an inert status so the
+    // comparison stays quiet.
+    if !(cfg.setpoint_off_enabled && ac_on) {
+        return SetpointOffStatus {
+            enabled: cfg.setpoint_off_enabled,
+            ac_on,
+            ..SetpointOffStatus::default()
+        };
+    }
+    let (at_setpoint, satisfied, on_zones) = setpoint_detail(snap);
     let mode_eligible = mode_eligible(snap);
     // The program only counts down when every On AC is in a heating/cooling
     // mode; mirror the engine's `setpoint_condition` so the UI and engine
     // agree and a mode change resets the badge immediately.
     let at_setpoint = at_setpoint && mode_eligible;
-    let target_time = if cfg.setpoint_off_enabled && ac_on && at_setpoint {
+    // `enabled && ac_on` is already established above, so the countdown only
+    // hinges on the zones being at setpoint.
+    let target_time = if at_setpoint {
         since.and_then(|start| {
             let deadline = start + cfg.setpoint_off_hold;
             // Once the hold has elapsed the engine fires on its next tick;
@@ -1181,6 +1198,62 @@ mod tests {
         assert!(
             st.target_time.is_none(),
             "no target time once the hold has elapsed"
+        );
+    }
+
+    /// A zone toggle must NOT change the setpoint-off status while the program
+    /// is disabled: the card renders no status detail then, so if the derived
+    /// counts leaked into the struct the SSE diff would re-emit the automation
+    /// card on every zone toggle (see the "system off" spurious-update bug).
+    #[test]
+    fn setpoint_status_stable_across_zone_toggle_when_disabled() {
+        let a = mock::sample_snapshot(); // AC on, mixed zones.
+        let mut b = a.clone();
+        // Flip an on-zone off (changes on_zones / satisfied / at_setpoint).
+        b.zones.get_mut(&0).unwrap().power = snapshot::ZonePowerView::Off;
+        let cfg = AutomationConfig::default(); // both programs disabled.
+        assert_eq!(
+            setpoint_off_status(&a, &cfg, None),
+            setpoint_off_status(&b, &cfg, None),
+            "disabled program must report an identical status across a zone toggle"
+        );
+    }
+
+    /// Likewise with the program enabled but every AC off: nothing is rendered,
+    /// so toggling a zone must leave the status untouched.
+    #[test]
+    fn setpoint_status_stable_across_zone_toggle_when_ac_off() {
+        let mut a = mock::sample_snapshot();
+        a.acs.get_mut(&0).unwrap().status.as_mut().unwrap().power = Some("Off");
+        let mut b = a.clone();
+        b.zones.get_mut(&0).unwrap().power = snapshot::ZonePowerView::Off;
+        let cfg = AutomationConfig {
+            setpoint_off_enabled: true,
+            ..AutomationConfig::default()
+        };
+        assert_eq!(
+            setpoint_off_status(&a, &cfg, None),
+            setpoint_off_status(&b, &cfg, None),
+            "with all ACs off the status must not change on a zone toggle"
+        );
+    }
+
+    /// Guard against over-suppression: while the program is enabled AND an AC
+    /// is on, the card DOES show a live "N/M zones" line, so a zone toggle must
+    /// still change the status (and thus re-emit over SSE).
+    #[test]
+    fn setpoint_status_reacts_to_zone_toggle_when_active() {
+        let a = snap_with_zone(24.0, 23.0); // one on-zone, AC on, Cool.
+        let mut b = a.clone();
+        b.zones.get_mut(&0).unwrap().power = snapshot::ZonePowerView::Off;
+        let cfg = AutomationConfig {
+            setpoint_off_enabled: true,
+            ..AutomationConfig::default()
+        };
+        assert_ne!(
+            setpoint_off_status(&a, &cfg, None),
+            setpoint_off_status(&b, &cfg, None),
+            "an enabled program with an AC on must reflect the on-zone count change"
         );
     }
 
