@@ -39,9 +39,11 @@ conditioning.
   setpoint (held for 15/30/60/120 minutes first), and **Idle auto-off** turns the
   AC(s) off after 15/30/60/120 minutes with no control changes. Settings are
   persisted to a JSON file and survive restarts.
-- **Two binaries.** `airtouch5-webui` talks to a real console; `airtouch5-webui-mock` serves the
+- **Three binaries.** `airtouch5-webui` talks to a real console; `airtouch5-webui-mock` serves the
   exact same UI against an in-memory mock, handy for trying the interface
-  without hardware.
+  without hardware; `airtouch5-webui-sse` is a debugging client that connects to
+  a running server's `/events` stream and pretty-prints the SSE fragments it
+  pushes (see below).
 
 ## Requirements
 
@@ -98,6 +100,39 @@ with a representative one-AC / six-zone setup (mirroring the static mockup). It
 shares `--bind` and `--timeout` with `airtouch5-webui` but has no
 discovery timeout (there is no console to discover). Use it to try the
 interface, demo it, or develop UI changes without hardware.
+
+### The SSE debug listener
+
+```sh
+./target/release/airtouch5-webui-sse --addr 127.0.0.1:3000
+```
+
+`airtouch5-webui-sse` connects to a running server's `/events` Server-Sent
+Events stream and pretty-prints each fragment the server pushes, so you can see
+exactly which `zone-<id>` / `ac-<id>` / `system` / `presets` / `automation`
+fragments an interaction re-emits (for example, confirming that applying a
+preset really pushes the affected zone rows with their updated colour and
+status). Flags:
+
+- `--addr <host:port>` -- server to connect to (default `127.0.0.1:3000`).
+- `--path <path>` -- SSE endpoint (default `/events`).
+- `--level names|compact|full` -- how much to print: event names only, a
+  one-line preview per event (default), or the whole HTML fragment.
+- `--timeout <secs>` -- exit after N seconds (otherwise runs until Ctrl-C);
+  on exit it prints a per-event-name count summary.
+- `--width <n>` -- preview truncation width for `compact` (default 100).
+- `--no-color` -- disable ANSI colour (auto-disabled when not a terminal).
+
+A typical debugging session runs the listener in one terminal while you click
+around the UI (or drive it with `curl`) in another:
+
+```sh
+# terminal 1: watch the stream
+./target/release/airtouch5-webui-sse --addr 127.0.0.1:8111 --level compact
+
+# terminal 2: apply a preset and see which fragments it re-emits
+curl -s -X POST http://127.0.0.1:8111/presets/apply -d 'name=evening'
+```
 
 ## The web UI
 

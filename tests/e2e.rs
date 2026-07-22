@@ -2254,3 +2254,87 @@ async fn preset_save_apply_remove_roundtrip() {
     })
     .await;
 }
+
+/// Reproduction: applying a preset must push the restored zone fragments
+/// (colour = `data-ac-mode`, status = the `off` row class / `zone-toggle`
+/// state) down the *live SSE stream*, exactly as clicking a zone or an AC
+/// control does. The existing round-trip test only inspects the apply POST
+/// response and GET partials, so a regression where the SSE stream stays
+/// silent on apply would slip through. This drives one long-lived SSE
+/// connection (a browser keeps a single stream open) across a save, a
+/// divergence, and an apply.
+#[tokio::test]
+async fn preset_apply_pushes_zone_updates_over_sse() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        let c = client();
+
+        // Open the SSE stream the way the page does, once, up front.
+        let resp = c
+            .get(format!("http://{addr}/events"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), reqwest::StatusCode::OK);
+        let mut stream = resp.bytes_stream();
+
+        // Save the initial (Cool, zone 0 On) state as preset "home".
+        c.post(format!("http://{addr}/presets"))
+            .form(&[("name", "home")])
+            .send()
+            .await
+            .unwrap();
+
+        // Diverge: AC -> Heat (re-tints every zone) and zone 0 -> Off.
+        c.post(format!("http://{addr}/ac/0/mode"))
+            .form(&[("mode", "heat")])
+            .send()
+            .await
+            .unwrap();
+        c.post(format!("http://{addr}/zone/0/power"))
+            .form(&[("power", "off")])
+            .send()
+            .await
+            .unwrap();
+
+        // Apply the preset. This should restore Cool + zone 0 On and push the
+        // updated zone fragments over SSE.
+        c.post(format!("http://{addr}/presets/apply"))
+            .form(&[("name", "home")])
+            .send()
+            .await
+            .unwrap();
+
+        // Track the latest zone-0 fragment seen on the stream. We wait until it
+        // reflects the *restored* state (cool + on), which only happens once the
+        // apply's SSE fragments land. If the apply fails to push them, this
+        // times out.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let mut buf = Vec::<u8>::new();
+        let mut restored = false;
+        while !restored {
+            let chunk = tokio::time::timeout_at(deadline, stream.next())
+                .await
+                .expect("SSE timed out waiting for the post-apply zone-0 fragment");
+            let chunk = chunk.expect("stream errored").expect("chunk errored");
+            buf.extend_from_slice(&chunk);
+            while let Some(idx) = buf.windows(2).position(|w| w == b"\n\n") {
+                let raw = buf.drain(..idx + 2).collect::<Vec<_>>();
+                if let Some((event, data)) = parse_sse_event(&raw) {
+                    if event == "zone-0"
+                        && data.contains(r#"data-ac-mode="cool""#)
+                        && data.contains("zone-toggle on")
+                        && !data.contains("zone-row off")
+                    {
+                        restored = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            restored,
+            "applying the preset should push the restored zone-0 fragment over SSE"
+        );
+    })
+    .await;
+}
