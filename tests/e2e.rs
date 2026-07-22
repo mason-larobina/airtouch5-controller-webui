@@ -2428,3 +2428,108 @@ async fn preset_apply_pushes_zone_updates_over_sse() {
     })
     .await;
 }
+
+/// Regression: applying a preset that changes the AC mode must never push a
+/// zone fragment painted in the *old* mode over the live SSE stream. A zone row
+/// is tinted by its owning AC's mode (`data-ac-mode`); if the zone commands run
+/// while the AC is still in the previous mode, each zone is emitted first with
+/// the stale colour and only re-tinted after the AC-mode command. Such a
+/// wrong-colour `outerHTML` swap can stick in the browser if the correcting
+/// swap races with it. `apply_scene` therefore applies the AC mode before the
+/// zones, so every zone fragment carries the final colour.
+#[tokio::test]
+async fn preset_apply_never_emits_stale_zone_colour() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+        let c = client();
+
+        // Open the SSE stream up front, drain the initial full render.
+        let resp = c.get(format!("http://{addr}/events")).send().await.unwrap();
+        let mut stream = resp.bytes_stream();
+        let mut buf = Vec::<u8>::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(12);
+        let mut initial_done = false;
+        while !initial_done {
+            let chunk = tokio::time::timeout_at(deadline, stream.next())
+                .await
+                .expect("drain initial");
+            buf.extend_from_slice(&chunk.unwrap().unwrap());
+            while let Some(idx) = buf.windows(2).position(|w| w == b"\n\n") {
+                let raw = buf.drain(..idx + 2).collect::<Vec<_>>();
+                if let Some((event, _)) = parse_sse_event(&raw) {
+                    if event == "presets" {
+                        initial_done = true;
+                    }
+                }
+            }
+        }
+
+        // Build preset "fan": AC fan mode, zones 1 & 6 on, zone 0 off.
+        c.post(format!("http://{addr}/ac/0/mode")).form(&[("mode", "fan")]).send().await.unwrap();
+        c.post(format!("http://{addr}/zone/0/power")).form(&[("power", "off")]).send().await.unwrap();
+        c.post(format!("http://{addr}/zone/1/power")).form(&[("power", "on")]).send().await.unwrap();
+        c.post(format!("http://{addr}/zone/6/power")).form(&[("power", "on")]).send().await.unwrap();
+        c.post(format!("http://{addr}/presets")).form(&[("name", "fan")]).send().await.unwrap();
+
+        // Build preset "cool": AC cool mode, different zones on (0 on, 1 & 6 off).
+        c.post(format!("http://{addr}/ac/0/mode")).form(&[("mode", "cool")]).send().await.unwrap();
+        c.post(format!("http://{addr}/zone/0/power")).form(&[("power", "on")]).send().await.unwrap();
+        c.post(format!("http://{addr}/zone/1/power")).form(&[("power", "off")]).send().await.unwrap();
+        c.post(format!("http://{addr}/zone/6/power")).form(&[("power", "off")]).send().await.unwrap();
+        c.post(format!("http://{addr}/presets")).form(&[("name", "cool")]).send().await.unwrap();
+
+        // Put the live state on the "fan" preset, then drain the stream quiet.
+        c.post(format!("http://{addr}/presets/apply")).form(&[("name", "fan")]).send().await.unwrap();
+        loop {
+            match tokio::time::timeout(Duration::from_millis(400), stream.next()).await {
+                Ok(Some(Ok(bytes))) => buf.extend_from_slice(&bytes),
+                _ => break,
+            }
+        }
+        buf.clear();
+
+        // Read the stream CONCURRENTLY with the single "cool" apply so we capture
+        // every emitted zone fragment (no coalescing from a late read).
+        use std::sync::{Arc, Mutex};
+        let log: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+        let log2 = log.clone();
+        let reader = tokio::spawn(async move {
+            let mut buf = buf;
+            loop {
+                match tokio::time::timeout(Duration::from_millis(800), stream.next()).await {
+                    Ok(Some(Ok(bytes))) => {
+                        buf.extend_from_slice(&bytes);
+                        while let Some(idx) = buf.windows(2).position(|w| w == b"\n\n") {
+                            let raw = buf.drain(..idx + 2).collect::<Vec<_>>();
+                            if let Some((event, data)) = parse_sse_event(&raw) {
+                                if event.starts_with("zone-") {
+                                    let colour = data
+                                        .split_once("data-ac-mode=\"")
+                                        .map(|r| r.1.split('"').next().unwrap_or("").to_string())
+                                        .unwrap_or_default();
+                                    log2.lock().unwrap().push((event, colour));
+                                }
+                            }
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        });
+
+        c.post(format!("http://{addr}/presets/apply")).form(&[("name", "cool")]).send().await.unwrap();
+        reader.await.unwrap();
+
+        // The target preset is Cool, so NO zone fragment emitted during the apply
+        // may carry a stale non-cool colour.
+        let log = log.lock().unwrap();
+        assert!(!log.is_empty(), "expected zone fragments during the apply");
+        for (zone, colour) in log.iter() {
+            assert_eq!(
+                colour, "cool",
+                "{zone} was emitted mid-apply with stale colour {colour:?} (expected cool)"
+            );
+        }
+    })
+    .await;
+}

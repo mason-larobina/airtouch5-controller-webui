@@ -73,14 +73,45 @@ pub async fn remove(State(state): State<AppState>) -> Result<Html<String>, AppEr
 
 /// Replay a preset through the normal command path.
 ///
-/// Zones are applied before AC power so an AC that should power on has at least
-/// one open zone (the console rejects running a unit with no airflow path). Per
-/// zone we send an absolute value first (which carries no power field, so it
-/// also sets the control mode without waking the zone) then the power state;
-/// per AC we send mode/fan/setpoint then power.
+/// Ordered in three phases:
+///
+/// 1. **AC mode / fan / setpoint first.** A zone row is tinted by its owning
+///    AC's operating mode (`ac_mode_slug` -> `data-ac-mode`). Applying the mode
+///    up front means every zone fragment emitted afterwards already carries the
+///    final colour, so the live SSE stream never pushes a zone painted in the
+///    *old* mode. Emitting a stale-colour fragment mid-apply can leave a zone
+///    stuck on the wrong colour in the browser if the correcting `outerHTML`
+///    swap races with an earlier one.
+/// 2. **Zones** (absolute value, which carries no power field so it sets the
+///    control mode without waking the zone, then the power state).
+/// 3. **AC power last**, so an AC that should power on has at least one open
+///    zone (the console rejects running a unit with no airflow path).
 async fn apply_scene(manager: &ManagerHandle, scene: &Scene) -> Result<(), AppError> {
     let snap = manager.snapshot_rx.borrow().clone();
 
+    // Phase 1: AC mode/fan/setpoint (not power) so zones tint correctly below.
+    for a in &scene.acs {
+        if !snap.acs.contains_key(&a.id) {
+            continue;
+        }
+        if let Some(mode) = slug_to_mode(&a.mode) {
+            send_ac(manager, a.id, AcControlReq::Mode(mode)).await?;
+        }
+        if let Some(fan) = slug_to_fan(&a.fan) {
+            send_ac(manager, a.id, AcControlReq::FanSpeed(fan)).await?;
+        }
+        if let Some(t) = a.setpoint_c {
+            send_ac(
+                manager,
+                a.id,
+                AcControlReq::Setpoint(Temperature::from_float(clamp_setpoint(t))),
+            )
+            .await?;
+        }
+    }
+
+    // Phase 2: zones. The AC mode is already set, so each zone's first emitted
+    // fragment carries the final colour.
     for z in &scene.zones {
         let Some(live) = snap.zones.get(&z.id) else {
             continue;
@@ -101,23 +132,10 @@ async fn apply_scene(manager: &ManagerHandle, scene: &Scene) -> Result<(), AppEr
         send_zone(manager, z.id, ZoneControlReq::Power(power)).await?;
     }
 
+    // Phase 3: AC power, after zones are open.
     for a in &scene.acs {
         if !snap.acs.contains_key(&a.id) {
             continue;
-        }
-        if let Some(mode) = slug_to_mode(&a.mode) {
-            send_ac(manager, a.id, AcControlReq::Mode(mode)).await?;
-        }
-        if let Some(fan) = slug_to_fan(&a.fan) {
-            send_ac(manager, a.id, AcControlReq::FanSpeed(fan)).await?;
-        }
-        if let Some(t) = a.setpoint_c {
-            send_ac(
-                manager,
-                a.id,
-                AcControlReq::Setpoint(Temperature::from_float(clamp_setpoint(t))),
-            )
-            .await?;
         }
         let power = if a.power { AcPower::On } else { AcPower::Off };
         send_ac(manager, a.id, AcControlReq::Power(power)).await?;
