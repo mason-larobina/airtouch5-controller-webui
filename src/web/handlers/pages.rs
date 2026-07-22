@@ -21,11 +21,13 @@ pub async fn index(
     state.automation.ensure_setpoint_countdown(&snap);
     let status = state.automation.setpoint_off_status(&snap);
     let idle = state.automation.idle_off_status(&snap);
+    let scenes = state.scenes.get();
     Ok(Html(templates::render_index(
         &snap,
         &cfg,
         &status,
         &idle,
+        &scenes,
         theme::from_headers(&headers),
     )))
 }

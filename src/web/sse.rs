@@ -26,6 +26,7 @@ use futures_util::stream::{self, Stream, StreamExt};
 
 use crate::automation::AutomationStore;
 use crate::manager::snapshot::Snapshot;
+use crate::scenes::SceneStore;
 use crate::templates;
 use crate::web::state::AppState;
 
@@ -33,7 +34,8 @@ use crate::web::state::AppState;
 pub async fn sse_events(axum::extract::State(state): axum::extract::State<AppState>) -> Response {
     let rx = state.manager.snapshot_rx.clone();
     let automation = state.automation.clone();
-    let stream = make_event_stream(rx, automation);
+    let scenes = state.scenes.clone();
+    let stream = make_event_stream(rx, automation, scenes);
     Sse::new(stream).keep_alive(KeepAlive::default()).into_response()
 }
 
@@ -41,6 +43,7 @@ pub async fn sse_events(axum::extract::State(state): axum::extract::State<AppSta
 struct SseState {
     rx: tokio::sync::watch::Receiver<Snapshot>,
     automation: AutomationStore,
+    scenes: SceneStore,
     prev: Snapshot,
     pending: VecDeque<Event>,
 }
@@ -52,13 +55,15 @@ struct SseState {
 fn make_event_stream(
     rx: tokio::sync::watch::Receiver<Snapshot>,
     automation: AutomationStore,
+    scenes: SceneStore,
 ) -> impl Stream<Item = Result<Event, Infallible>> + Send {
     let initial = rx.borrow().clone();
-    let initial_events: Vec<Event> = full_events(&initial, &automation);
+    let initial_events: Vec<Event> = full_events(&initial, &automation, &scenes);
 
     let state = SseState {
         rx,
         automation,
+        scenes,
         prev: initial,
         pending: VecDeque::new(),
     };
@@ -78,7 +83,7 @@ fn make_event_stream(
                 // No net change worth re-emitting.
                 continue;
             }
-            for ev in diff_events(&s.prev, &new, &s.automation) {
+            for ev in diff_events(&s.prev, &new, &s.automation, &s.scenes) {
                 s.pending.push_back(ev);
             }
             s.prev = new;
@@ -91,7 +96,7 @@ fn make_event_stream(
 /// zone, plus the automation card. (We deliberately emit per-id `ac-<id>`/
 /// `zone-<id>` events rather than a single `acs`/`zones` blob so the
 /// browser's `sse-swap` listeners on individual cards fire.)
-fn full_events(snap: &Snapshot, automation: &AutomationStore) -> Vec<Event> {
+fn full_events(snap: &Snapshot, automation: &AutomationStore, scenes: &SceneStore) -> Vec<Event> {
     // If the setpoint condition already holds at connect time, start the
     // countdown so the initial render shows the "powering off at HH:MM" target
     // (the engine seeds it on its first tick, which may not have run yet).
@@ -106,11 +111,17 @@ fn full_events(snap: &Snapshot, automation: &AutomationStore) -> Vec<Event> {
         out.push(named(&format!("zone-{}", zone.id), templates::render_zone(zone)));
     }
     out.push(named("automation", render_automation(automation, snap)));
+    out.push(named("presets", presets_fragment(scenes, snap)));
     out
 }
 
 /// Diff two snapshots and emit only the changed fragments.
-fn diff_events(prev: &Snapshot, new: &Snapshot, automation: &AutomationStore) -> Vec<Event> {
+fn diff_events(
+    prev: &Snapshot,
+    new: &Snapshot,
+    automation: &AutomationStore,
+    scenes: &SceneStore,
+) -> Vec<Event> {
     let mut out = Vec::new();
 
     if prev.connected != new.connected {
@@ -182,6 +193,16 @@ fn diff_events(prev: &Snapshot, new: &Snapshot, automation: &AutomationStore) ->
         out.push(named("automation", render_automation(automation, new)));
     }
 
+    // Re-emit the presets card when the selected (matching) preset changes, so
+    // the active tile highlight and the Remove button's enabled state stay in
+    // step with live control changes. The config itself only changes via a
+    // POST (which re-renders the card in its own response), so tracking the
+    // active name is enough here and keeps sensor-drift snapshots quiet.
+    let cfg = scenes.get();
+    if cfg.active_name(prev) != cfg.active_name(new) {
+        out.push(named("presets", presets_fragment(scenes, new)));
+    }
+
     out
 }
 
@@ -191,6 +212,11 @@ fn render_automation(automation: &AutomationStore, snap: &Snapshot) -> String {
     let status = automation.setpoint_off_status(snap);
     let idle = automation.idle_off_status(snap);
     templates::render_automation(&cfg, &status, &idle)
+}
+
+/// Render the `#presets` card fragment for an SSE event payload.
+fn presets_fragment(scenes: &SceneStore, snap: &Snapshot) -> String {
+    templates::render_presets(&scenes.get(), snap)
 }
 
 /// Build a named SSE event whose data is an HTML fragment.

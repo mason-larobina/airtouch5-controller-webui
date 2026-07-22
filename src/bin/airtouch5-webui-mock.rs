@@ -13,6 +13,7 @@ use std::time::Duration;
 use clap::Parser;
 
 use airtouch5_webui::automation::{self, AutomationStore};
+use airtouch5_webui::scenes::{self, SceneStore};
 use airtouch5_webui::{mock, serve};
 
 /// airtouch5-webui-mock: AirTouch 5 web UI against an in-memory mock controller.
@@ -41,6 +42,12 @@ struct Cli {
     /// `$XDG_CONFIG_HOME/airtouch5-webui/automation.json` (~/.config/airtouch5-webui/...).
     #[arg(long)]
     automation_config: Option<PathBuf>,
+
+    /// Path to the presets config file (saved full-state captures).
+    /// Created/updated on change; loaded on startup. When unset, defaults to
+    /// `$XDG_CONFIG_HOME/airtouch5-webui/scenes.json` (~/.config/airtouch5-webui/...).
+    #[arg(long)]
+    scenes_config: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -77,9 +84,18 @@ async fn main() {
         );
     }
 
+    // Load the shared presets store (defaults to the XDG path so the mock UI
+    // persists presets like the real binary; use --scenes-config to override).
+    let scenes = SceneStore::load(
+        cli.scenes_config
+            .or_else(scenes::default_config_path)
+            .unwrap_or_else(|| PathBuf::from("scenes.json")),
+    );
+
     serve(
         manager,
         automation,
+        scenes,
         cli.bind,
         cli.timeout.map(Duration::from_secs),
     )

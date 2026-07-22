@@ -23,7 +23,8 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(15);
 async fn spawn_server() -> (SocketAddr, MockController) {
     let (manager, mock_ctrl) = mock::spawn_mock_controller(mock::sample_snapshot());
     let automation = airtouch5_webui::automation::AutomationStore::new(AutomationConfig::default());
-    let app = web::build_router(manager, automation);
+    let scenes = airtouch5_webui::scenes::SceneStore::new(Default::default());
+    let app = web::build_router(manager, automation, scenes);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -2134,6 +2135,121 @@ async fn theme_cookie_round_trip() {
         assert!(
             set_cookie.contains("theme=daylight"),
             "bogus theme should sanitize to default, got: {set_cookie}"
+        );
+    })
+    .await;
+}
+
+/// Save a preset, mutate the AC away from it, then apply it and confirm the
+/// live state reverts and the preset renders active with Remove enabled.
+#[tokio::test]
+async fn preset_save_apply_remove_roundtrip() {
+    capped(async {
+        let (addr, _m) = spawn_server().await;
+
+        // Empty to start: no tiles, Remove disabled.
+        let body = client()
+            .get(format!("http://{addr}/partials/presets"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(body.contains("No presets yet"), "expected empty state: {body}");
+
+        // Save the current sample state as "evening".
+        let body = client()
+            .post(format!("http://{addr}/presets"))
+            .form(&[("name", "evening")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        // Fresh capture matches live -> tile active + Remove enabled.
+        assert!(body.contains("evening"), "saved preset tile missing: {body}");
+        assert!(
+            body.contains(r#"class="btn preset-tile active"#),
+            "just-saved preset should be active: {body}"
+        );
+        assert!(
+            !body.contains("disabled"),
+            "Remove should be enabled while a preset matches: {body}"
+        );
+
+        // Drift the AC mode away from the preset (Cool -> Heat).
+        let body = client()
+            .post(format!("http://{addr}/ac/0/mode"))
+            .form(&[("mode", "heat")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(body.contains("ac-0"), "expected AC card back: {body}");
+
+        // Now no preset matches -> Remove disabled, tile not active.
+        let body = client()
+            .get(format!("http://{addr}/partials/presets"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(
+            body.contains("disabled"),
+            "Remove should be disabled when nothing matches: {body}"
+        );
+        assert!(
+            !body.contains(r#"class="btn preset-tile active"#),
+            "no tile should be active after drift: {body}"
+        );
+
+        // Apply the preset -> live reverts, tile active again.
+        let body = client()
+            .post(format!("http://{addr}/presets/apply"))
+            .form(&[("name", "evening")])
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(
+            body.contains(r#"class="btn preset-tile active"#),
+            "applying should re-activate the preset: {body}"
+        );
+
+        // The AC really went back to Cool.
+        let body = client()
+            .get(format!("http://{addr}/partials/acs/0"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(
+            body.contains(r#"data-ac-mode="cool""#),
+            "AC mode should have reverted to cool: {body}"
+        );
+
+        // Remove the active preset -> back to empty.
+        let body = client()
+            .post(format!("http://{addr}/presets/remove"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert!(
+            body.contains("No presets yet"),
+            "preset should be gone after remove: {body}"
         );
     })
     .await;

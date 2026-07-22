@@ -1390,6 +1390,44 @@ footer a:hover {
   color: var(--warn);
 }
 
+/* Presets card (above the AC units). Reuses the automation .program-card /
+   .program-head shell: a header band with the "Presets" name and the
+   Remove / Save controls, then a wrap row of preset tiles. */
+.presets {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* Save/Remove sit in the head's control cluster, sharing the .btn base. */
+.preset-action {
+  min-height: var(--btn-h);
+  padding: 8px 16px;
+}
+/* Tile row: one applyable button per saved preset, wrapping on narrow
+   screens. Sits in the card body under the header band. */
+.preset-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.preset-tile {
+  min-width: 64px;
+  text-align: center;
+}
+/* Active tile: the preset that matches the current live state, using the
+   shared accent-dim / accent / --sel-text "selected" treatment. */
+.preset-tile.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--sel-text);
+}
+.preset-empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 /* Narrow screens: stack the zone row into two rows and the system card into
    one column. Kept at the end of the file so it wins over the rules above. */
 @media (max-width: 560px) {

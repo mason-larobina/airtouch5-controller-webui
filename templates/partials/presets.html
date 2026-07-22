@@ -1,0 +1,30 @@
+<div id="presets" class="presets" sse-swap="presets" hx-swap="outerHTML">
+  <div class="program-card" data-program="presets">
+    <div class="program-head">
+      <div class="program-name">Presets</div>
+      <div class="program-controls">
+        <button type="button" class="btn preset-action remove"
+                {% if !has_active %} disabled{% endif %}
+                title="Remove the preset matching the current settings"
+                hx-post="/presets/remove"
+                hx-target="#presets">Remove</button>
+        <button type="button" class="btn preset-action save"
+                title="Save the current settings as a new preset"
+                hx-post="/presets"
+                hx-vals='js:{"name": window.prompt("Preset name?") || ""}'
+                hx-target="#presets">Save</button>
+      </div>
+    </div>
+    <div class="preset-tiles">
+      {% for p in presets %}
+      <button type="button" class="btn preset-tile{% if p.active %} active{% endif %}"
+              aria-pressed="{% if p.active %}true{% else %}false{% endif %}"
+              hx-post="/presets/apply" hx-vals='{"name":"{{ p.name }}"}'
+              hx-target="#presets">{{ p.name }}</button>
+      {% endfor %}
+      {% if presets.is_empty() %}
+      <div class="preset-empty">No presets yet -- Save the current settings to add one.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>

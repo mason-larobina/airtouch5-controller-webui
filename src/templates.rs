@@ -8,6 +8,7 @@ use askama::Template;
 
 use crate::automation::{AutomationConfig, IdleOffStatus, SetpointOffStatus};
 use crate::manager::snapshot::{AcView, BulkModeView, Snapshot, ZoneView};
+use crate::scenes::SceneConfig;
 use crate::web::theme::{THEMES, Theme};
 
 #[derive(Template)]
@@ -18,6 +19,10 @@ pub struct IndexTemplate<'a> {
     pub config: &'a AutomationConfig,
     pub status: &'a SetpointOffStatus,
     pub idle: &'a IdleOffStatus,
+    /// Saved presets plus whether one currently matches live state (for the
+    /// Presets card the index includes above the AC units).
+    pub presets: Vec<PresetRow>,
+    pub has_active: bool,
     /// The active theme (from the `theme` cookie) and every available theme,
     /// for <html data-theme> and the footer theme selector.
     pub theme: &'static Theme,
@@ -29,16 +34,60 @@ pub fn render_index(
     config: &AutomationConfig,
     status: &SetpointOffStatus,
     idle: &IdleOffStatus,
+    scenes: &SceneConfig,
     theme: &'static Theme,
 ) -> String {
+    let (presets, has_active) = build_preset_rows(scenes, snapshot);
     IndexTemplate {
         snapshot,
         bulk_mode: snapshot.bulk_mode(),
         config,
         status,
         idle,
+        presets,
+        has_active,
         theme,
         themes: THEMES,
+    }
+    .render()
+    .unwrap_or_default()
+}
+
+/// One row in the Presets card: a preset name and whether it currently matches
+/// the live state (so its tile is highlighted and Remove targets it).
+pub struct PresetRow {
+    pub name: String,
+    pub active: bool,
+}
+
+#[derive(Template)]
+#[template(path = "partials/presets.html")]
+pub struct PresetsTemplate {
+    pub presets: Vec<PresetRow>,
+    pub has_active: bool,
+}
+
+/// Build the preset rows plus the "some preset is active" flag from the saved
+/// config and the live snapshot.
+fn build_preset_rows(cfg: &SceneConfig, snap: &Snapshot) -> (Vec<PresetRow>, bool) {
+    let active = cfg.active_name(snap);
+    let rows = cfg
+        .scenes
+        .iter()
+        .map(|s| PresetRow {
+            name: s.name.clone(),
+            active: Some(&s.name) == active.as_ref(),
+        })
+        .collect();
+    (rows, active.is_some())
+}
+
+/// Render the presets card fragment (`#presets`).
+pub fn render_presets(cfg: &SceneConfig, snap: &Snapshot) -> String {
+    let (presets, has_active) = build_preset_rows(cfg, snap);
+    PresetsTemplate {
+        presets,
+        has_active,
     }
     .render()
     .unwrap_or_default()

@@ -29,6 +29,7 @@ pub mod automation;
 pub mod config;
 pub mod manager;
 pub mod mock;
+pub mod scenes;
 pub mod templates;
 pub mod web;
 
@@ -36,6 +37,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use crate::automation::AutomationStore;
+use crate::scenes::SceneStore;
 
 pub use manager::ManagerHandle;
 
@@ -51,10 +53,11 @@ pub use manager::ManagerHandle;
 pub async fn serve(
     manager: ManagerHandle,
     automation: AutomationStore,
+    scenes: SceneStore,
     bind: SocketAddr,
     timeout: Option<Duration>,
 ) {
-    let app = web::build_router(manager, automation);
+    let app = web::build_router(manager, automation, scenes);
     let listener = tokio::net::TcpListener::bind(bind)
         .await
         .unwrap_or_else(|e| panic!("failed to bind {bind}: {e}"));

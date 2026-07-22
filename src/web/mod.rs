@@ -14,13 +14,19 @@ use tower_http::trace::TraceLayer;
 
 use crate::automation::AutomationStore;
 use crate::manager::ManagerHandle;
+use crate::scenes::SceneStore;
 use state::AppState;
 
 /// Build the full axum router.
-pub fn build_router(manager: ManagerHandle, automation: AutomationStore) -> Router {
+pub fn build_router(
+    manager: ManagerHandle,
+    automation: AutomationStore,
+    scenes: SceneStore,
+) -> Router {
     let state = AppState {
         manager,
         automation,
+        scenes,
     };
 
     Router::new()
@@ -51,6 +57,11 @@ pub fn build_router(manager: ManagerHandle, automation: AutomationStore) -> Rout
         // Bulk zone controls (apply to every zone)
         .route("/zones/power", post(handlers::zone::set_all_power))
         .route("/zones/preset", post(handlers::zone::set_all_preset))
+        // Presets (save / apply / remove a named full-state capture)
+        .route("/partials/presets", get(handlers::preset::partial_presets))
+        .route("/presets", post(handlers::preset::save))
+        .route("/presets/apply", post(handlers::preset::apply))
+        .route("/presets/remove", post(handlers::preset::remove))
         // Automation programs (configure + enable/disable)
         .route(
             "/partials/automation",

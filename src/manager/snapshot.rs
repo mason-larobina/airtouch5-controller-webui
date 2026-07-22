@@ -690,6 +690,26 @@ impl AcView {
     pub fn fan_eq(&self, s: &str) -> bool {
         self.fan().is_some_and(|p| p == s)
     }
+    /// Lowercase control slug for the current fan speed, matching the values
+    /// the `POST /ac/:id/fan` handler accepts ("auto"/"quiet"/"low"/"medium"/
+    /// "high"/"powerful"/"turbo"/"intelligentauto"), or "" when unset. Used to
+    /// capture and match presets. IntelligentAuto is reported as an "Auto"
+    /// label plus a separate flag, so it is checked first.
+    pub fn fan_slug(&self) -> &'static str {
+        if self.fan_int_auto() {
+            return "intelligentauto";
+        }
+        match self.fan() {
+            Some("Auto") => "auto",
+            Some("Quiet") => "quiet",
+            Some("Low") => "low",
+            Some("Med") => "medium",
+            Some("High") => "high",
+            Some("Power") => "powerful",
+            Some("Turbo") => "turbo",
+            _ => "",
+        }
+    }
     pub fn mode_supported(&self, s: &str) -> bool {
         self.supported_modes.contains(&s)
     }
